@@ -1,0 +1,15 @@
+cc_binary {
+    name: "vendor.samsung_ext.hardware.camera.flashlight-service",
+    relative_install_path: "hw",
+    init_rc: ["vendor.samsung_ext.hardware.camera.flashlight-service.rc"],
+    vintf_fragments: ["vendor.samsung_ext.hardware.camera.flashlight-service.xml"],
+    srcs: [
+        "Flashlight.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
+    ],
+}
