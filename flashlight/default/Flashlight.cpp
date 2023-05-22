@@ -89,6 +89,12 @@ ndk::ScopedAStatus Flashlight::setBrightness(int32_t level) {
 }
 
 ndk::ScopedAStatus Flashlight::enableFlash(bool enable) {
+    int32_t rc = 0;
+    auto ret = getCurrentBrightness(&rc);
+    if (ret.isOk()) {
+	if (!!rc == enable)
+	    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+    }
     WriteStringToFile(FLASH_NODE, std::to_string(static_cast<int>(enable)));
     return ndk::ScopedAStatus::ok();
 }
