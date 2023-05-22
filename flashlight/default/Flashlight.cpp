@@ -31,7 +31,26 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
 		    *_aidl_return = 0;
 		    break;
 	    case 1:
+		    // If last written is 1, we are really not so sure it is still level_saved.
+		    // But QS flash writes 1 anyway.
 		    *_aidl_return = level_saved;
+		    break;
+	    case 1001:
+		    *_aidl_return = 1;
+		    break;
+	    case 1002:
+		    *_aidl_return = 2;
+		    break;
+	    case 1003:
+	    case 1004:
+		    *_aidl_return = 3;
+		    break;
+	    case 1005:
+	    case 1006:
+		    *_aidl_return = 4;
+		    break;
+	    case 1007 ... 1009:
+		    *_aidl_return = 5;
 		    break;
 	    default:
 		    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
