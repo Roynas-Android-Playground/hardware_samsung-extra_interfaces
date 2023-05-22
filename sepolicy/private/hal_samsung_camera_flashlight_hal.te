@@ -1,6 +1,6 @@
 hal_attribute(samsung_camera_flashlight)
 
-# HWBinder IPC from client to server
+# Binder IPC from client to server
 binder_call(hal_samsung_camera_flashlight_client, hal_samsung_camera_flashlight_server)
 
 add_service(hal_samsung_camera_flashlight_server, hal_samsung_camera_flashlight_service)
