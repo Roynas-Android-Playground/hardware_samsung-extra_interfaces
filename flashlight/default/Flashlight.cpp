@@ -83,6 +83,8 @@ ndk::ScopedAStatus Flashlight::setBrightness(int32_t level) {
     }
     WriteStringToFile(FLASH_NODE, std::to_string(writeval));
     level_saved = level;
+    // Disable it, it will turn on as it writes
+    enableFlash(false);
     return ndk::ScopedAStatus::ok();
 }
 
