@@ -66,6 +66,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         for ((key, value) in PREF_FLASH_MODES) {
             val preference = findPreference<RadioButtonPreference>(key)!!
             preference.isChecked = value == mSavedIntesity
+            preference.isEnabled = false
             preference.setOnPreferenceClickListener {
                 setIntesity(value)
                 mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, value).apply()
@@ -82,11 +83,15 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         if (mService == null) {
             Log.e(TAG, "mService is null...")
             return
-        }   
+        }
         try {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
+        }
+        for ((key, value) in PREF_FLASH_MODES) {
+            val mPreference = findPreference<RadioButtonPreference>(key)!!
+            mPreference.isEnabled = isChecked
         }
     }
 
