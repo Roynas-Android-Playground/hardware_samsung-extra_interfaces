@@ -22,6 +22,7 @@ import android.os.Bundle
 import android.os.ServiceManager
 import android.provider.Settings
 import android.util.Log
+import android.widget.Toast
 import android.widget.Switch
 
 import androidx.preference.Preference
@@ -83,6 +84,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
+            Toast.makeText(requireContext(), R.string.use_app_flash, Toast.LENGTH_SHORT).show()
             return
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
