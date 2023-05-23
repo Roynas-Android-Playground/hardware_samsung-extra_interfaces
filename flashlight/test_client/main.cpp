@@ -7,6 +7,16 @@
 using SpB = ndk::SpAIBinder;
 using aidl::vendor::samsung_ext::hardware::camera::flashlight::IFlashlight;
 
+#define TEST_LOG_EXT(name, arg, exttext, ...)                                      \
+  {                                                                            \
+    auto rc = svc->name(arg);                                                  \
+    printf("%s: ok: %s" exttext "\n", #name, rc.isOk() ? "true" : "false",     \
+           ##__VA_ARGS__);                                                     \
+    sleep(1);                                                                  \
+  }
+
+#define TEST_LOG(name, arg) TEST_LOG_EXT(name, arg, "")
+
 int main(void) {
   auto binder = AServiceManager_waitForService(
       "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default");
@@ -15,15 +25,10 @@ int main(void) {
     return 1;
   }
   auto svc = IFlashlight::fromBinder(SpB(binder));
-  int rc = 0;
-  svc->enableFlash(1);
-  sleep(2);
-  auto ret = svc->getCurrentBrightness(&rc);
-  printf("getCurrentBrightness: ok: %d, %d\n", ret.isOk(), rc);
-  sleep(2);
-  svc->setBrightness(5);
-  sleep(2);
-  svc->setBrightness(1);
-  sleep(2);
-  svc->enableFlash(0);
+  int ret = 0;
+  TEST_LOG(enableFlash, 1);
+  TEST_LOG_EXT(getCurrentBrightness, &ret, "ret: %d", ret);
+  TEST_LOG(setBrightness, 5);
+  TEST_LOG(setBrightness, 1);
+  TEST_LOG(enableFlash, 0);
 }
