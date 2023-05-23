@@ -94,7 +94,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             mPreference.isEnabled = isChecked
         }
     }
-
+            
     private fun setIntesity(intesity: Int) {
         if (intesity < 0 && intesity > 5) {
            Log.e(TAG, "Invalid intesity $intesity")
@@ -111,6 +111,13 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
         mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService?.getCurrentBrightness() ?: -1)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (mService != null) {
+            switchBar.isChecked = mService.getCurrentBrightness() != 0
+        }
     }
 
     companion object {
