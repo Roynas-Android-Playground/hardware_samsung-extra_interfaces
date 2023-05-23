@@ -13,7 +13,7 @@
 using ::aidl::vendor::samsung_ext::hardware::camera::flashlight::Flashlight;
 
 int main() {
-    ABinderProcess_setThreadPoolMaxThreadCount(0);
+    ABinderProcess_setThreadPoolMaxThreadCount(4);
     std::shared_ptr<Flashlight> flashlight = ndk::SharedRefBase::make<Flashlight>();
 
     const std::string instance = std::string() + Flashlight::descriptor + "/default";
