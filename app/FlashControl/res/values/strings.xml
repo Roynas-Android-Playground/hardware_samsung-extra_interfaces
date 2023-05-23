@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Title -->
+    <string name="flash_title" translatable="false">Flash Intesity</string>
+
+    <!-- Switch bar -->
+    <string name="flash_enable_title">Enable Flashlight Controls</string>
+
+    <!-- Intro -->
+    <string name="flash_top_intro_summary">Control the intesity of the flashlight</string>
+
+    <!-- Modes -->
+    <string name="flash_intesity_1">Brightness 1</string>
+    <string name="flash_intesity_2">Brightness 2</string>
+    <string name="flash_intesity_3">Brightness 3</string>
+    <string name="flash_intesity_4">Brightness 4</string>
+    <string name="flash_intesity_5">Brightness 5</string>
+
+    <!-- Tests, Infos -->
+    <string name="flash_current_intesity">Current brightness intesity: %d</string>
+    <string name="flash_current_on">Flash is currently %s</string>
+
+    <!-- On Off -->
+    <string name="on">On</string>
+    <string name="off">Off</string>
+</resources>
