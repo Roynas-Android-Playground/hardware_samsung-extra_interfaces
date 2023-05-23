@@ -78,6 +78,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
         if (mService == null) {
             Log.e(TAG, "mService is null...")
+            switchView.isChecked = false
             return
         }
         try {
@@ -85,6 +86,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
             Toast.makeText(requireContext(), R.string.use_app_flash, Toast.LENGTH_SHORT).show()
+            switchView.isChecked = false
             return
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
