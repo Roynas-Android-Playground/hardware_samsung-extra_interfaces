@@ -1,4 +1,4 @@
-service flashlight-hal-aidl /system/bin/hw/vendor.samsung_ext.hardware.camera.flashlight-service
+service flashlight-hal-aidl /system_ext/bin/hw/vendor.samsung_ext.hardware.camera.flashlight-service
     class hal
     user system
     group system

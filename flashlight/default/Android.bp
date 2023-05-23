@@ -12,4 +12,5 @@ cc_binary {
         "libbinder_ndk",
         "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
     ],
+    system_ext_specific: true,
 }

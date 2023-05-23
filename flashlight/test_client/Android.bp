@@ -10,5 +10,6 @@ cc_binary {
    ],
    srcs: [
       "main.cpp"
-   ]
+   ],
+   system_ext_specific: true,
 }
