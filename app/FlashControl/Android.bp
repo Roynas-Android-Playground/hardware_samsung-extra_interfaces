@@ -10,6 +10,15 @@ android_app {
         "vendor.samsung_ext.hardware.camera.flashlight-V1-java",
     ],
     defaults: ["SettingsLibDefaults"],
-    required: ["vendor.samsung_ext.hardware.camera.flashlight-service"],
+    required: [
+        "vendor.samsung_ext.hardware.camera.flashlight-service",
+        "privapp_whitelist_com.royna.flashcontrol.xml"
+    ],
     system_ext_specific: true,
+}
+
+prebuilt_etc {
+    name: "privapp_whitelist_com.royna.flashcontrol.xml",
+    src: "privapp_whitelist_com.royna.flashcontrol.xml",
+    sub_dir: "permissions"
 }

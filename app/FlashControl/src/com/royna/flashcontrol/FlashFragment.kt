@@ -20,6 +20,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
 import android.os.ServiceManager
+import android.provider.Settings
 import android.util.Log
 import android.widget.Switch
 
@@ -86,6 +87,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
         if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
+	Settings.Secure.putInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, if (isChecked) 1 else 0)
         for ((key, value) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
             mPreference.isEnabled = isChecked
@@ -108,13 +110,6 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
         mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        if (mService != null) {
-            switchBar.isChecked = mService.getCurrentBrightness() != 0
-        }
     }
 
     companion object {
