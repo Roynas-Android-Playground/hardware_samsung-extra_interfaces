@@ -5,6 +5,9 @@ cc_binary {
       "libbase",
       "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk"
    ],
+   header_libs: [
+      "libext_support",
+   ],
    srcs: [
       "main.cpp"
    ]
