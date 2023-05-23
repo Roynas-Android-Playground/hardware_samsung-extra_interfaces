@@ -7,7 +7,7 @@
     <string name="flash_enable_title">Enable Flashlight Controls</string>
 
     <!-- Intro -->
-    <string name="flash_top_intro_summary">Control the intesity of the flashlight</string>
+    <string name="flash_footer_summary">Control the intesity of the flashlight. Values can be changed when flash is on.</string>
 
     <!-- Modes -->
     <string name="flash_intesity_1">Brightness 1</string>
