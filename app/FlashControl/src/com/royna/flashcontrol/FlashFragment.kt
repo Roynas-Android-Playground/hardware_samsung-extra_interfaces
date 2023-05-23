@@ -46,6 +46,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     private lateinit var mSharedPreferences : SharedPreferences
     private lateinit var mCurrentIntesity : Preference
     private lateinit var mCurrentOn: Preference
+    private lateinit var mPoolExecutor : ScheduledThreadPoolExecutor
 
     private val mScheduler = Runnable {
         mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (mService?.getCurrentBrightness() == 0 ?: false) R.string.on else R.string.off))
@@ -72,7 +73,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
-        val mPoolExecutor = ScheduledThreadPoolExecutor(2)
+        mPoolExecutor = ScheduledThreadPoolExecutor(2)
         mPoolExecutor.scheduleWithFixedDelay(mScheduler, 0, 5, TimeUnit.SECONDS)
     }
 
