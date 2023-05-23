@@ -19,7 +19,6 @@ package com.royna.flashcontrol
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.os.RemoteException
 import android.os.ServiceManager
 import android.util.Log
 import android.widget.Switch
@@ -31,6 +30,8 @@ import androidx.preference.PreferenceManager
 import com.android.settingslib.widget.MainSwitchPreference
 import com.android.settingslib.widget.OnMainSwitchChangeListener
 import com.android.settingslib.widget.RadioButtonPreference
+
+import java.lang.IllegalStateException
 
 import java.util.concurrent.ScheduledThreadPoolExecutor
 import java.util.concurrent.TimeUnit
@@ -84,7 +85,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }   
         try {
             mService.enableFlash(isChecked)
-        } catch (e : RemoteException) {
+        } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
         }
     }
