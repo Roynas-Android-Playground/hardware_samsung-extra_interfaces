@@ -7,7 +7,7 @@
 using SpB = ndk::SpAIBinder;
 using aidl::vendor::samsung_ext::hardware::camera::flashlight::IFlashlight;
 
-int main(const int, const char**) {
+int main(void) {
   auto binder = AServiceManager_waitForService(
       "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default");
   if (!binder) {
