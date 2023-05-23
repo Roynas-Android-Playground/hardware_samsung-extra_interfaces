@@ -1,5 +1,5 @@
 service flashlight-hal-aidl /system/bin/hw/vendor.samsung_ext.hardware.camera.flashlight-service
     class hal
-    user root
-    group root
+    user system
+    group system
     shutdown critical
