@@ -33,9 +33,6 @@ import com.android.settingslib.widget.RadioButtonPreference
 
 import java.lang.IllegalStateException
 
-import java.util.concurrent.ScheduledThreadPoolExecutor
-import java.util.concurrent.TimeUnit
-
 import com.royna.flashcontrol.R
 
 import vendor.samsung_ext.hardware.camera.flashlight.IFlashlight
@@ -47,12 +44,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     private lateinit var mSharedPreferences : SharedPreferences
     private lateinit var mCurrentIntesity : Preference
     private lateinit var mCurrentOn: Preference
-    private lateinit var mPoolExecutor : ScheduledThreadPoolExecutor
 
-    private val mScheduler = Runnable {
-        mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (mService?.getCurrentBrightness() == 0 ?: false) R.string.on else R.string.off))
-    }
-        
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.flash_settings)
 
@@ -60,6 +52,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 
         switchBar = findPreference<MainSwitchPreference>(PREF_FLASH_ENABLE)!!
         switchBar.addOnSwitchChangeListener(this)
+        switchBar.isChecked = mService?.getCurrentBrightness() != 0 ?: false
 
         val mSavedIntesity = mSharedPreferences.getInt(PREF_FLASH_INTESITY, 1)
 
@@ -74,9 +67,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             }
         }
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
+        mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (switchBar.isChecked) R.string.on else R.string.off))
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
-        mPoolExecutor = ScheduledThreadPoolExecutor(2)
-        mPoolExecutor.scheduleWithFixedDelay(mScheduler, 0, 5, TimeUnit.SECONDS)
+        
+        mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), -1)
     }
 
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
@@ -88,7 +82,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
+            return
         }
+        mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
+        if (isChecked) mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
         for ((key, value) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
             mPreference.isEnabled = isChecked
@@ -110,7 +107,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             preference.isChecked = value == intesity
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
-        mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService?.getCurrentBrightness() ?: -1)
+        mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
     }
 
     override fun onResume() {
