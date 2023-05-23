@@ -22,6 +22,6 @@
     <string name="use_app_flash">Use app\'s switch to control flashlight on/off while testing</string>
 
     <!-- On Off -->
-    <string name="on">On</string>
-    <string name="off">Off</string>
+    <string name="on">on</string>
+    <string name="off">off</string>
 </resources>
