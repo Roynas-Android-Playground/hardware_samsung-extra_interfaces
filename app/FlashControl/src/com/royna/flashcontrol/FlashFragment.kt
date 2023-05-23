@@ -67,10 +67,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             }
         }
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
-        mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (switchBar.isChecked) R.string.on else R.string.off))
+        mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (switchBar.isChecked) R.string.on else R.string.off))
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
         
-        mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), -1)
+        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), -1)
     }
 
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
@@ -84,8 +84,8 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             Log.e(TAG, "enableFlash() failed", e)
             return
         }
-        mCurrentOn.summary = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
-        if (isChecked) mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
+        mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
+        if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
         for ((key, value) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
             mPreference.isEnabled = isChecked
@@ -107,7 +107,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             preference.isChecked = value == intesity
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
-        mCurrentIntesity.summary = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
+        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
     }
 
     override fun onResume() {
