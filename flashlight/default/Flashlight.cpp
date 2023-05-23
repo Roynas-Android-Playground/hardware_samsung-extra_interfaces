@@ -24,8 +24,9 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
     std::string value;
     int intvalue = -1;
 
-    ReadFileToString(FLASH_NODE, &value);
-    intvalue = std::stoi(value);
+    auto ret = ReadFileToString(FLASH_NODE, &value);
+    if (ret) 
+	intvalue = std::stoi(value);
     switch (intvalue) {
 	    case 0:
 		    *_aidl_return = 0;
