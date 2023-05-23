@@ -63,9 +63,6 @@ ndk::ScopedAStatus Flashlight::setBrightness(int32_t level) {
     if (level > 5 || level < 1)
        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
     int writeval = 0;
-    int32_t rc = 0;
-    auto ret = getCurrentBrightness(&rc);
-    bool restore = ret.isOk() && !rc;
     switch (level) {
 	case 1:
 		writeval = 1001;
@@ -87,8 +84,6 @@ ndk::ScopedAStatus Flashlight::setBrightness(int32_t level) {
     }
     WriteStringToFile(std::to_string(writeval), FLASH_NODE);
     level_saved = level;
-    // Disable it, it will turn on as it writes, but only when it was off before
-    if (restore) enableFlash(false);
     return ndk::ScopedAStatus::ok();
 }
 
