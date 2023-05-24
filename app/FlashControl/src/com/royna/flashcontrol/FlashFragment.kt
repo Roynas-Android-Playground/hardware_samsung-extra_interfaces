@@ -92,11 +92,11 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 		val mMainHandler = Handler(Looper.getMainLooper())
                 when (mEnabled) {
                     0 -> mMainHandler.post {
-		        switchBar.isChecked = false
+		        switchBar.setChecked(false)
 			switchBar.isEnabled = true
                     }
                     1 -> mMainHandler.post {
-		        switchBar.isChecked = true
+		        switchBar.setChecked(true)
 			switchBar.isEnabled = false
 		        Toast.makeText(requireContext(), R.string.disabled_qs, Toast.LENGTH_SHORT).show()
 		    }
@@ -112,14 +112,14 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
         if (mService == null) {
             Log.e(TAG, "mService is null...")
-            switchView.isChecked = false
+            switchView.setChecked(false)
             return
         }
         try {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
-            switchView.isChecked = false
+            switchView.setChecked(false)
             return
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
