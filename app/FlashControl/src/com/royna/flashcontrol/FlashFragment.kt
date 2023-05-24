@@ -76,11 +76,15 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             }
         }
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
-        mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (switchBar.isChecked) R.string.on else R.string.off))
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
-        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mBrightness)
         requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
+    }
 
+    override fun onResume() {
+        super.onResume()
+        val mBrightness = mService?.getCurrentBrightness() ?: 0
+	mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mBrightness)
+	mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (mBrightness != 0) R.string.on else R.string.off))
     }
 
     private val mSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
