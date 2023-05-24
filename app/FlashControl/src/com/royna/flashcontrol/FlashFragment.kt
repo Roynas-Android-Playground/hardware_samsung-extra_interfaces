@@ -84,6 +84,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     private val mSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
         override fun onChange(selfChange: Boolean) {
             super.onChange(selfChange)
+	    if (context == null) return
             try {
 	        val mEnabled = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
                 when (mEnabled) {
