@@ -126,7 +126,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     }
             
     private fun setIntesity(intesity: Int) {
-        if (intesity < 0 && intesity > 5) {
+        if (intesity < 0 || intesity > 5) {
            Log.e(TAG, "Invalid intesity $intesity")
            return
         }
