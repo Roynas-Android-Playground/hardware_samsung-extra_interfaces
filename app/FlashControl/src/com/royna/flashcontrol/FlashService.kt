@@ -19,9 +19,9 @@ class FlashService : Service() {
      private val mService : IFlashlight? = IFlashlight.Stub.asInterface(ServiceManager.waitForDeclaredService("vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"))
      private val mMainHandler = Handler(Looper.getMainLooper())
      private lateinit var mContext : Context
-     private var mBrightSetting = 0
+     private fun getBrightness(mCtx: Context) = PreferenceManager.getDefaultSharedPreferences(mCtx).getInt(FlashFragment.PREF_FLASH_INTESITY, 1)
+
      override fun onStartCommand(i: Intent?, flags: Int, startid : Int) : Int {
-          mBrightSetting = PreferenceManager.getDefaultSharedPreferences(this).getInt(FlashFragment.PREF_FLASH_INTESITY, 1)
 	  contentResolver.registerContentObserver(FlashFragment.mFlashUrl, false, mFlashObserver)
 	  mContext = this
 	  return START_STICKY
@@ -34,6 +34,7 @@ class FlashService : Service() {
 	      super.onChange(s)
 	      val isOn = Settings.Secure.getInt(mContext.contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, 0)
 	      if (isOn == 1) {
+	          val mBrightSetting = getBrightness(mContext)
 	          mMainHandler.postDelayed({
 		       Log.d("FlashControlSVC", "Setting $mBrightSetting")
                        mService?.setBrightness(mBrightSetting)
