@@ -4,7 +4,7 @@
     <string name="flash_title" translatable="false">Flash Intesity</string>
 
     <!-- Switch bar -->
-    <string name="flash_enable_title">Enable Flashlight Controls</string>
+    <string name="flash_enable_title">Enable Flashlight</string>
 
     <!-- Intro -->
     <string name="flash_footer_summary">Control the intesity of the flashlight. Values can be changed when flash is on.</string>
