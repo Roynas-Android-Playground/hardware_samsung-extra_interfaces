@@ -160,6 +160,13 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness())
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+	if (Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED) == 0 && mService?.getCurrentBrightness() ?: 0 != 0) {
+	   mService?.enableFlash(false)
+	}
+    }
+
     companion object {
         private const val PREF_FLASH_ENABLE = "flash_enable"
         const val PREF_FLASH_INTESITY = "flash_intesity"
