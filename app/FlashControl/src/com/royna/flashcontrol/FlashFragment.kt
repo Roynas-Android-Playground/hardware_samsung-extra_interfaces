@@ -66,7 +66,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         for ((key, value) in PREF_FLASH_MODES) {
             val preference = findPreference<RadioButtonPreference>(key)!!
             preference.isChecked = value == mSavedIntesity
-            preference.isEnabled = false
+            preference.isEnabled = switchBar.isChecked
             preference.setOnPreferenceClickListener {
                 setIntesity(value)
                 mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, value).apply()
