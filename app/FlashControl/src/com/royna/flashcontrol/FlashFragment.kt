@@ -127,8 +127,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             switchView.setChecked(false)
             return
         }
+	val kBright = mService.getCurrentBrightness()
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
-        if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
+        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), kBright)
+	setIntesity(kBright)
         requireContext().contentResolver.notifyChange(mFlashUrl, mSettingsObserver, ContentResolver.NOTIFY_UPDATE)
         changeRadioButtons(isChecked)
     }
@@ -141,7 +143,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     }
             
     private fun setIntesity(intesity: Int) {
-        if (intesity < 0 || intesity > 5) {
+        if (intesity < 1 || intesity > 5) {
            Log.e(TAG, "Invalid intesity $intesity")
            return
         }
