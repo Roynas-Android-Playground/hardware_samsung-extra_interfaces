@@ -59,7 +59,8 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 
         switchBar = findPreference<MainSwitchPreference>(PREF_FLASH_ENABLE)!!
         switchBar.addOnSwitchChangeListener(this)
-        switchBar.isChecked = mService?.getCurrentBrightness() != 0 ?: false
+        val mBrightness = mService?.getCurrentBrightness() ?: 0
+        switchBar.isChecked = mBrightness != 0
 
         val mSavedIntesity = mSharedPreferences.getInt(PREF_FLASH_INTESITY, 1)
 
@@ -76,8 +77,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (switchBar.isChecked) R.string.on else R.string.off))
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
-        
-        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), -1)
+        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), if (switchBar.isChecked) mBrightness else -1)
         requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
     }
 
