@@ -60,7 +60,9 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         switchBar = findPreference<MainSwitchPreference>(PREF_FLASH_ENABLE)!!
         switchBar.addOnSwitchChangeListener(this)
         val mBrightness = mService?.getCurrentBrightness() ?: 0
+        val mSettingBrightness = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, 0)
         switchBar.isChecked = mBrightness != 0
+        switchBar.isEnabled = mSettingBrightness == 0
 
         val mSavedIntesity = mSharedPreferences.getInt(PREF_FLASH_INTESITY, 1)
 
@@ -89,11 +91,18 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 	        val mEnabled = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
 		val mMainHandler = Handler(Looper.getMainLooper())
                 when (mEnabled) {
-                    0 -> mMainHandler.post { switchBar.isChecked = false }
-                    1 -> mMainHandler.post { switchBar.isChecked = true }
+                    0 -> mMainHandler.post {
+		        switchBar.isChecked = false
+			switchBar.isEnabled = true
+                    }
+                    1 -> mMainHandler.post {
+		        switchBar.isChecked = true
+			switchBar.isEnabled = false
+		        Toast.makeText(requireContext(), R.string.disabled_qs, Toast.LENGTH_SHORT).show()
+		    }
                     else -> {}
 		}
-		changeRadioButtons(switchBar.isChecked)
+		changeRadioButtons(mEnabled == 1)
             } catch (e: Settings.SettingNotFoundException) {
                 e.printStackTrace()
             }
@@ -115,7 +124,6 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
         if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
-	Settings.Secure.putInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, if (isChecked) 1 else 0)
         requireContext().contentResolver.notifyChange(mFlashUrl, mSettingsObserver, ContentResolver.NOTIFY_UPDATE)
         changeRadioButtons(isChecked)
     }

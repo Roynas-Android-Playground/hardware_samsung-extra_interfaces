@@ -19,6 +19,7 @@
     <!-- Tests, Infos -->
     <string name="flash_current_intesity">Current brightness intesity: %d</string>
     <string name="flash_current_on">Flash is currently %s</string>
+    <string name="disabled_qs">Use the QS panel flash to turn off flashlight</string>
 
     <!-- On Off -->
     <string name="on">on</string>
