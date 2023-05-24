@@ -87,9 +87,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 	    if (context == null) return
             try {
 	        val mEnabled = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
+		val mMainHandler = Handler(Looper.getMainLooper())
                 when (mEnabled) {
-                    0 -> switchBar.isChecked = false
-                    1 -> switchBar.isChecked = true
+                    0 -> mMainHandler.post { switchBar.isChecked = false }
+                    1 -> mMainHandler.post { switchBar.isChecked = true }
                     else -> {}
 		}
 		changeRadioButtons(switchBar.isChecked)
