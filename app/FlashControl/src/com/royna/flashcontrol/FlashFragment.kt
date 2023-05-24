@@ -136,7 +136,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     }
 
     private fun changeRadioButtons(enable: Boolean) {
-        for ((key, value) in PREF_FLASH_MODES) {
+        for ((key, _) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
             mPreference.isEnabled = enable
         }
@@ -157,7 +157,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             preference.isChecked = value == intesity
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
-        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
+        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness())
     }
 
     companion object {
