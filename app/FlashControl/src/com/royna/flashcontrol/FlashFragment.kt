@@ -91,6 +91,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
                     1 -> switchBar.isChecked = true
                     else -> {}
 		}
+		changeRadioButtons(switchBar.isChecked)
             } catch (e: Settings.SettingNotFoundException) {
                 e.printStackTrace()
             }
@@ -114,9 +115,13 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
 	Settings.Secure.putInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, if (isChecked) 1 else 0)
         requireContext().contentResolver.notifyChange(mFlashUrl, mSettingsObserver, ContentResolver.NOTIFY_UPDATE)
+        changeRadioButtons(isChecked)
+    }
+
+    private fun changeRadioButtons(enable: Boolean) {
         for ((key, value) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
-            mPreference.isEnabled = isChecked
+            mPreference.isEnabled = enable
         }
     }
             
