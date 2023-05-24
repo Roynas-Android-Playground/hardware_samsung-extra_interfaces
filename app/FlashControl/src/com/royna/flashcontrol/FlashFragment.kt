@@ -17,8 +17,12 @@
 package com.royna.flashcontrol
 
 import android.content.Context
+import android.content.ContentResolver
 import android.content.SharedPreferences
+import android.database.ContentObserver
 import android.os.Bundle
+import android.os.Looper
+import android.os.Handler
 import android.os.ServiceManager
 import android.provider.Settings
 import android.util.Log
@@ -46,6 +50,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     private lateinit var mSharedPreferences : SharedPreferences
     private lateinit var mCurrentIntesity : Preference
     private lateinit var mCurrentOn: Preference
+    private val mFlashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.flash_settings)
@@ -73,6 +78,23 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
         
         mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), -1)
+        requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
+    }
+
+    private val mSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            super.onChange(selfChange)
+            try {
+	        val mEnabled = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
+                when (mEnabled) {
+                    0 -> switchBar.isChecked = false
+                    1 -> switchBar.isChecked = true
+                    else -> {}
+		}
+            } catch (e: Settings.SettingNotFoundException) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
@@ -85,13 +107,13 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.e(TAG, "enableFlash() failed", e)
-            Toast.makeText(requireContext(), R.string.use_app_flash, Toast.LENGTH_SHORT).show()
             switchView.isChecked = false
             return
         }
         mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
         if (isChecked) mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness() ?: -1)
 	Settings.Secure.putInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, if (isChecked) 1 else 0)
+        requireContext().contentResolver.notifyChange(mFlashUrl, mSettingsObserver, ContentResolver.NOTIFY_UPDATE)
         for ((key, value) in PREF_FLASH_MODES) {
             val mPreference = findPreference<RadioButtonPreference>(key)!!
             mPreference.isEnabled = isChecked
