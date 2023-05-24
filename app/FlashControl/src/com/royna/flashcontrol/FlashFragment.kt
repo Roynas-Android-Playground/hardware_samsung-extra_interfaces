@@ -119,7 +119,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         try {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
-            Log.e(TAG, "enableFlash() failed", e)
+            Log.w(TAG, "enableFlash() failed")
             switchView.setChecked(false)
             return
         }
