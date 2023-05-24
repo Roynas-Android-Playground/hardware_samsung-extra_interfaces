@@ -19,16 +19,9 @@ package com.royna.flashcontrol
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.ServiceManager
-
-import androidx.preference.PreferenceManager
-
-import vendor.samsung_ext.hardware.camera.flashlight.IFlashlight
 
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(context)
-        val mService: IFlashlight? = IFlashlight.Stub.asInterface(ServiceManager.waitForDeclaredService("vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"))
-        mService?.setBrightness(sharedPrefs.getInt(FlashFragment.PREF_FLASH_INTESITY, 1))
+        context.startService(Intent(context, FlashService::class.java))
     }
 }

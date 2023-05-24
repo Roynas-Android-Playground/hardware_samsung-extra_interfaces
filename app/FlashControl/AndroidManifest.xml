@@ -10,6 +10,7 @@
         android:directBootAware="true"
         android:label="FlashController"
         android:supportsRtl="true"
+	android:persistent="true"
         android:theme="@style/Theme.SubSettingsBase">
 
         <activity
@@ -38,5 +39,9 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </receiver>
+
+	<service 
+	     android:name=".FlashService"
+	     android:exported="true"/>
     </application>
 </manifest>

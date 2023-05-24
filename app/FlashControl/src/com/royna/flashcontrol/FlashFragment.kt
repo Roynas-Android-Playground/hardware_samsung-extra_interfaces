@@ -50,7 +50,6 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     private lateinit var mSharedPreferences : SharedPreferences
     private lateinit var mCurrentIntesity : Preference
     private lateinit var mCurrentOn: Preference
-    private val mFlashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
         addPreferencesFromResource(R.xml.flash_settings)
@@ -81,6 +80,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
         mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mBrightness)
         requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
+
     }
 
     private val mSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -167,5 +167,6 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
                 "flash_intesity_5" to 5,
         )
         private const val TAG = "FlashCtrl"
+        val mFlashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)
     }
 }
