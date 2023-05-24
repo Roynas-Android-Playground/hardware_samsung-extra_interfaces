@@ -94,6 +94,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
                     0 -> mMainHandler.post {
 		        switchBar.setChecked(false)
 			switchBar.isEnabled = true
+			mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(R.string.off))
                     }
                     1 -> mMainHandler.post {
 		        switchBar.setChecked(true)
