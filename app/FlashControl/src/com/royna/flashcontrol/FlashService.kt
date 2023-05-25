@@ -38,7 +38,7 @@ class FlashService : Service() {
 	          mMainHandler.postDelayed({
 		       Log.d("FlashControlSVC", "Setting $mBrightSetting")
                        mService?.setBrightness(mBrightSetting)
-                  }, 100)
+                  }, 25)
 	      }
           }
       }
