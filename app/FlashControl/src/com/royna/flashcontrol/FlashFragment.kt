@@ -85,6 +85,13 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         val mBrightness = mService?.getCurrentBrightness() ?: 0
 	mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mBrightness)
 	mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (mBrightness != 0) R.string.on else R.string.off))
+	val isSettingOn = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED) != 0
+	if (!isSettingOn) {
+	    switchBar.apply {
+		setChecked(mBrightness != 0)
+		isEnabled = mBrightness == 0
+	    }
+	}
     }
 
     private val mSettingsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
@@ -160,11 +167,25 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness())
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onPause() {
+        super.onPause()
+	beGoneFlash()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        beGoneFlash()
+    }
+
+    private fun beGoneFlash() {
 	if (Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED) == 0 && mService?.getCurrentBrightness() ?: 0 != 0) {
 	   mService?.enableFlash(false)
 	}
+    }
+
+    override fun onDestroy() {
+	super.onDestroy()
+	requireContext().contentResolver.unregisterContentObserver(mSettingsObserver)
     }
 
     companion object {
