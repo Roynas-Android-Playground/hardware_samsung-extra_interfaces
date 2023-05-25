@@ -80,12 +80,16 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
     }
 
+    private fun changeIntesityView(b: Int) { mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), b) }
+    private fun changeOnOffView(b: Boolean) { mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (b) R.string.on else R.string.off)) }
+    private fun getSettingFlash() = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
+
     override fun onResume() {
         super.onResume()
         val mBrightness = mService?.getCurrentBrightness() ?: 0
-	mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mBrightness)
-	mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (mBrightness != 0) R.string.on else R.string.off))
-	val isSettingOn = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED) != 0
+	changeIntesityView(mBrightness)
+	changeOnOffView(mBrightness != 0)
+	val isSettingOn = getSettingFlash() != 0
 	if (!isSettingOn) {
 	    switchBar.apply {
 		setChecked(mBrightness != 0)
@@ -99,20 +103,20 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             super.onChange(selfChange)
 	    if (context == null) return
             try {
-	        val mEnabled = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
 		val mMainHandler = Handler(Looper.getMainLooper())
+		val mEnabled = getSettingFlash()
                 when (mEnabled) {
                     0 -> mMainHandler.post {
 		        switchBar.setChecked(false)
 			switchBar.isEnabled = true
-			mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(R.string.off))
+			changeOnOffView(false)
                     }
                     1 -> mMainHandler.post {
 		        switchBar.setChecked(true)
 			switchBar.isEnabled = false
 		        Toast.makeText(requireContext(), R.string.disabled_qs, Toast.LENGTH_SHORT).show()
 		    }
-                    else -> {}
+                    else -> return@onChange
 		}
 		changeRadioButtons(mEnabled == 1)
             } catch (e: Settings.SettingNotFoundException) {
@@ -135,10 +139,9 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             return
         }
 	val kBright = mService.getCurrentBrightness()
-        mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (isChecked) R.string.on else R.string.off))
-        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), kBright)
+        changeOnOffView(isChecked)
+        changeIntesityView(kBright)
 	setIntesity(kBright)
-        requireContext().contentResolver.notifyChange(mFlashUrl, mSettingsObserver, ContentResolver.NOTIFY_UPDATE)
         changeRadioButtons(isChecked)
     }
 
@@ -164,7 +167,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
             preference.isChecked = value == intesity
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
-        mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), mService.getCurrentBrightness())
+        changeIntesityView(mService.getCurrentBrightness())
     }
 
     override fun onPause() {
@@ -178,7 +181,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
     }
 
     private fun beGoneFlash() {
-	if (Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED) == 0 && mService?.getCurrentBrightness() ?: 0 != 0) {
+	if (getSettingFlash() == 0 && mService?.getCurrentBrightness() ?: 0 != 0) {
 	   mService?.enableFlash(false)
 	}
     }
