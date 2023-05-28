@@ -33,7 +33,7 @@ const std::map<int32_t, TouchscreenGesture::GestureInfo> TouchscreenGesture::kGe
 };
 
 bool TouchscreenGesture::isSupported() {
-    std::ifstream file(kTspPath);
+    std::ofstream file(kTspPath);
     return file.good();
 }
 
@@ -51,7 +51,7 @@ Return<void> TouchscreenGesture::getSupportedGestures(getSupportedGestures_cb re
 
 Return<bool> TouchscreenGesture::setGestureEnabled(
     const ::vendor::lineage::touch::V1_0::Gesture&, bool enabled) {
-    std::fstream file(kTspPath);
+    std::ofstream file(kTspPath);
 
     file << "singletap_enable," << (enabled ? "1" : "0");
 
