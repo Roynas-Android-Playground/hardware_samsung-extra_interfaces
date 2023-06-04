@@ -1,0 +1,23 @@
+//
+// Copyright (C) 2023 Royna (@roynatech2544 on GH)
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+
+cc_binary {
+    name: "vendor.samsung_ext.framework.battery-service",
+    relative_install_path: "hw",
+    init_rc: ["vendor.samsung_ext.framework.battery-service.rc"],
+    vintf_fragments: ["vendor.samsung_ext.framework.battery-service.xml"],
+    srcs: [
+        "SmartCharge.cpp",
+        "service.cpp",
+    ],
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "vendor.samsung_ext.framework.battery-V1-ndk",
+    ],
+    cpp_std: "c++17",
+    system_ext_specific: true,
+}

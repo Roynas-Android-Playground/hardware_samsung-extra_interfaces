@@ -1,0 +1,4 @@
+service vendor.battery-default /vendor/bin/hw/vendor.samsung_ext.framework.battery-service
+    class hal
+    user system
+    group system
