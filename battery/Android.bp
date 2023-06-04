@@ -1,0 +1,17 @@
+aidl_interface {
+    name: "vendor.samsung_ext.framework.battery",
+    srcs: ["vendor/samsung_ext/framework/battery/*.aidl"],
+    stability: "vintf",
+    backend: {
+        java: {
+            platform_apis: true,
+        },
+    },
+    versions_with_info: [
+        {
+            version: "1",
+            imports: [],
+        },
+    ],
+
+}
