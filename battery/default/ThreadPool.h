@@ -36,6 +36,7 @@ class ThreadPool {
   void Shutdown() {
     {
       std::unique_lock<std::mutex> lock(mutex);
+      if (stop) return;
       stop = true;
     }
     condition.notify_all();
