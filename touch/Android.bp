@@ -13,8 +13,8 @@
 // limitations under the License.
 
 cc_binary {
-    name: "vendor.lineage.touch@1.0-service.singletap",
-    init_rc: ["vendor.lineage.touch@1.0-service.singletap.rc"],
+    name: "vendor.lineage.touch@1.0-service.ss",
+    init_rc: ["vendor.lineage.touch@1.0-service.ss.rc"],
     defaults: ["hidl_defaults"],
     relative_install_path: "hw",
     // FIXME: this should be 'vendor: true' for modules that will eventually be

@@ -1,0 +1,6 @@
+service vendor.touch-hal-1-0-singletap /vendor/bin/hw/vendor.lineage.touch@1.0-service.ss
+    # class hal will cause a abort once since the chowning is not completed.
+    # since this is not a core HAL, defer start
+    class late_start
+    user system
+    group system
