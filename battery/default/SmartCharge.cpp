@@ -24,14 +24,14 @@ using ::android::base::WaitForPropertyCreation;
 using ::android::base::ReadFileToString;
 using ::android::base::WriteStringToFile;
 
-static constexpr const char* kSmartChargeConfigProp =
+static constexpr const char *kSmartChargeConfigProp =
     "persist.ext.smartcharge.config";
-static constexpr const char* kSmartChargeEnabledProp =
+static constexpr const char *kSmartChargeEnabledProp =
     "persist.ext.smartcharge.enabled";
 static constexpr const char kComma = ',';
-static constexpr const char* kChargeCtlSysfs =
+static constexpr const char *kChargeCtlSysfs =
     "/sys/devices/platform/battery/power_supply/battery/batt_slate_mode";
-static constexpr const char* kBatteryPercentSysfs =
+static constexpr const char *kBatteryPercentSysfs =
     "/sys/devices/platform/battery/power_supply/battery/capacity";
 
 struct ConfigPair {
@@ -40,7 +40,7 @@ struct ConfigPair {
   std::string fromPair(void) {
     return std::to_string(first) + kComma + std::to_string(second);
   }
-  static std::optional<ConfigPair> fromString(const std::string& v) {
+  static std::optional<ConfigPair> fromString(const std::string &v) {
     int first, second;
     std::stringstream ss(v);
     std::string res;
@@ -70,12 +70,13 @@ struct BatteryHelper {
   }
 };
 
-static std::optional<ConfigPair> getAndParseIfPossible(const char* prop) {
+static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
   std::string propval;
-  WaitForPropertyCreation(prop);
-  propval = GetProperty(prop, "");
-  if (!propval.empty()) {
-    return ConfigPair::fromString(propval);
+  if (WaitForPropertyCreation(prop, std::chrono::milliseconds(500))) {
+    propval = GetProperty(prop, "");
+    if (!propval.empty()) {
+      return ConfigPair::fromString(propval);
+    }
   }
   return std::nullopt;
 }
