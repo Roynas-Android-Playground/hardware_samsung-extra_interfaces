@@ -12,7 +12,7 @@ namespace framework {
 namespace battery {
 
 class ThreadPool {
- public:
+public:
   explicit ThreadPool(size_t threadCount) {
     for (size_t i = 0; i < threadCount; ++i) {
       threads.emplace_back([this] {
@@ -21,7 +21,8 @@ class ThreadPool {
           {
             std::unique_lock<std::mutex> lock(mutex);
             condition.wait(lock, [this] { return !tasks.empty() || stop; });
-            if (stop && tasks.empty()) return;
+            if (stop && tasks.empty())
+              return;
             task = std::move(tasks.front());
             tasks.pop();
           }
@@ -31,23 +32,33 @@ class ThreadPool {
     }
   }
 
-  bool isRunning() const { return !stop; }
+  bool isRunning() {
+    bool ret;
+    {
+      std::unique_lock<std::mutex> lock(mutex);
+      ret = !stop;
+    }
+    return ret;
+  }
 
   void Shutdown() {
     {
       std::unique_lock<std::mutex> lock(mutex);
-      if (stop) return;
+      if (stop)
+        return;
       stop = true;
     }
     condition.notify_all();
-    for (auto& thread : threads) thread.join();
+    for (auto &thread : threads)
+      thread.join();
   }
 
   template <typename Func, typename... Args>
-  void Enqueue(Func&& func, Args&&... args) {
+  void Enqueue(Func &&func, Args &&...args) {
     {
       std::unique_lock<std::mutex> lock(mutex);
-      if (stop) return;
+      if (stop)
+        return;
       tasks.emplace([=] { std::invoke(func, args...); });
     }
     condition.notify_one();
@@ -55,7 +66,7 @@ class ThreadPool {
 
   ~ThreadPool() { Shutdown(); }
 
- private:
+private:
   std::vector<std::thread> threads;
   std::queue<std::function<void()>> tasks;
   std::mutex mutex;
@@ -63,8 +74,8 @@ class ThreadPool {
   bool stop = false;
 };
 
-}  // namespace battery
-}  // namespace framework
-}  // namespace samsung_ext
-}  // namespace vendor
-}  // namespace aidl
+} // namespace battery
+} // namespace framework
+} // namespace samsung_ext
+} // namespace vendor
+} // namespace aidl
