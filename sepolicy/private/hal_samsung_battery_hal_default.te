@@ -5,3 +5,6 @@ type hal_samsung_battery_default_exec, exec_type, system_file_type, file_type;
 init_daemon_domain(hal_samsung_battery_default)
 
 binder_call(hal_samsung_battery_default, servicemanager);
+
+set_prop(hal_samsung_battery_default, ext_smartcharge_prop);
+get_prop(hal_samsung_battery_default, ext_smartcharge_prop);
