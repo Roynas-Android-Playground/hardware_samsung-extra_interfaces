@@ -129,7 +129,10 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper, int32_t lower) {
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   if (upper == -1 && lower == -1)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  if (kPoolPtr && !kPoolPtr->isRunning()) {  // Dead pointer
+  if (lower == -1 && restart)
+    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+  if (kPoolPtr && !kPoolPtr->isRunning()) {
+    // Dead pointer, reset it.
     kPoolPtr.reset();
   }
   if (!!kPoolPtr == enable)
