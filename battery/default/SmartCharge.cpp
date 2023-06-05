@@ -119,6 +119,8 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper, int32_t lower) {
   if (upper < 1 || upper <= lower)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
 
+  if (upper > 95 || lower < 50)
+    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kPoolPtr && kPoolPtr->isRunning())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair{lower < 0 ? -1 : lower, upper};
