@@ -108,7 +108,7 @@ SmartCharge::SmartCharge(void) {
 }
 
 void SmartCharge::startLoop(bool withrestart) {
-  while (true) {
+  while (kRun.load()) {
     if (BatteryHelper::getPercent() > upper)
       BatteryHelper::setChargable(false);
     else if (withrestart && BatteryHelper::getPercent() < lower)
@@ -145,10 +145,11 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   auto pair = ConfigPair{static_cast<int>(enable), static_cast<int>(restart)};
   SetProperty(kSmartChargeEnabledProp, pair.fromPair());
   if (enable) {
+    kRun.store(true);
     kPoolPtr = std::make_shared<ThreadPool>(3);
-    kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); },
-                      restart);
+    kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); }, restart);
   } else {
+    kRun.store(false);
     kPoolPtr->Shutdown();
   }
   return ndk::ScopedAStatus::ok();

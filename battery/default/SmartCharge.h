@@ -9,6 +9,7 @@
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
 
 #include "ThreadPool.h"
+#include <atomic>
 
 namespace aidl {
 namespace vendor {
@@ -20,6 +21,7 @@ class SmartCharge : public BnSmartCharge {
   std::shared_ptr<ThreadPool> kPoolPtr;
   int upper, lower;
   void startLoop(bool withrestart);
+  std::atomic_bool kRun;
 
  public:
   SmartCharge();
