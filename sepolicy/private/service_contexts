@@ -1,1 +1,2 @@
 vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default		u:object_r:hal_samsung_camera_flashlight_service:s0
+vendor.samsung_ext.framework.battery.ISmartCharge/default			u:object_r:hal_samsung_battery_service:s0

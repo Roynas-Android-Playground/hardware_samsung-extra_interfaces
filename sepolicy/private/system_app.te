@@ -1,1 +1,2 @@
 binder_call(system_app, hal_samsung_camera_flashlight)
+binder_call(system_app, hal_samsung_battery)

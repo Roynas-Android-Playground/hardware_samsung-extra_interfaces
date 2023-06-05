@@ -1,0 +1,10 @@
+hal_attribute(samsung_battery)
+
+# Binder IPC from client to server
+binder_call(hal_samsung_battery_client, hal_samsung_battery_server)
+
+add_service(hal_samsung_battery_server, hal_samsung_battery_service)
+allow hal_samsung_battery_client hal_samsung_battery_service:service_manager find;
+
+# Allow binder communication with system_app
+binder_call(hal_samsung_battery, system_app)
