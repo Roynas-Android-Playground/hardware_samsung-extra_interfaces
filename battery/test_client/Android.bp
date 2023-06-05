@@ -1,0 +1,16 @@
+cc_binary {
+   name: "test_smartcharge",
+   shared_libs: [
+      "libbinder_ndk",
+      "libbase",
+      "vendor.samsung_ext.framework.battery-V1-ndk"
+   ],
+   header_libs: [
+      "libext_support",
+   ],
+   srcs: [
+      "main.cpp"
+   ],
+   cppflags: ["-fexceptions"],
+   system_ext_specific: true,
+}
