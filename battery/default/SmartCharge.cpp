@@ -116,16 +116,15 @@ void SmartCharge::startLoop(bool withrestart) {
   }
 }
 
-ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper, int32_t lower) {
-  if (upper < 1 || upper <= lower)
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-
-  if (upper > 95 || lower < 50)
+ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
+  if (upper_ <= lower_ || upper_ > 95 || lower_ < 50)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kPoolPtr && kPoolPtr->isRunning())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  auto pair = ConfigPair{lower < 0 ? -1 : lower, upper};
+  auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.fromPair());
+  lower_ = lower;
+  upper_ upper;
   return ndk::ScopedAStatus::ok();
 }
 
