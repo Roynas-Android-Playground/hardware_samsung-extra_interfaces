@@ -71,9 +71,8 @@ struct BatteryHelper {
 };
 
 static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
-  std::string propval;
   if (WaitForPropertyCreation(prop, std::chrono::milliseconds(500))) {
-    propval = GetProperty(prop, "");
+    std::string propval = GetProperty(prop, "");
     if (!propval.empty()) {
       return ConfigPair::fromString(propval);
     }
@@ -81,11 +80,15 @@ static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
   return std::nullopt;
 }
 
+static inline bool verifyConfig(const int lower, const int upper) {
+  return !(upper <= lower || upper > 95 || lower < 50);
+}
+
 SmartCharge::SmartCharge(void) {
   kPoolPtr = std::make_shared<ThreadPool>(3);
   kPoolPtr->Enqueue([this] {
     auto ret = getAndParseIfPossible(kSmartChargeConfigProp);
-    if (ret.has_value()) {
+    if (ret.has_value() && verifyConfig(ret->first, ret->second)) {
       upper = ret->second;
       lower = ret->first;
     } else {
@@ -117,19 +120,19 @@ void SmartCharge::startLoop(bool withrestart) {
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
-  if (upper_ <= lower_ || upper_ > 95 || lower_ < 50)
+  if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kPoolPtr && kPoolPtr->isRunning())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.fromPair());
-  lower_ = lower;
-  upper_ upper;
+  lower = lower_;
+  upper = upper_;
   return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
-  if (upper == -1 && lower == -1)
+  if (!verifyConfig(lower, upper))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   if (lower == -1 && restart)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
