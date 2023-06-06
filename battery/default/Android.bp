@@ -20,5 +20,6 @@ cc_binary {
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
     cpp_std: "c++17",
+    cppflags: ["-fexceptions"],
     system_ext_specific: true,
 }

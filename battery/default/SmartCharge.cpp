@@ -8,7 +8,6 @@
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
-
 #include <log/log.h>
 
 #include <sstream>
@@ -56,20 +55,23 @@ struct ConfigPair {
   }
 };
 
-struct BatteryHelper {
-  static bool canCharge(void) {
+class BatteryHelper {
+  static int _readSysfs(const char *sysfs) {
     std::string data;
-    ReadFileToString(kChargeCtlSysfs, &data);
-    return !stoi(data);
+    ReadFileToString(sysfs, &data);
+    try {
+      return stoi(data);
+    } catch (const std::exception &e) {
+      ALOGE("%s: %s for '%s'", __func__, e.what(), data.c_str());
+    }
+    return -1;
   }
+
+ public:
   static void setChargable(bool enable) {
     WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
   }
-  static int getPercent(void) {
-    std::string data;
-    ReadFileToString(kBatteryPercentSysfs, &data);
-    return stoi(data);
-  }
+  static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
 };
 
 static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
@@ -93,7 +95,7 @@ SmartCharge::SmartCharge(void) {
     if (ret.has_value() && verifyConfig(ret->first, ret->second)) {
       upper = ret->second;
       lower = ret->first;
-      ALOGD("%s: upper: %d, lower: %d", __func__,  upper, lower);
+      ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
     } else {
       upper = -1;
       lower = -1;
@@ -125,7 +127,8 @@ void SmartCharge::startLoop(bool withrestart) {
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
-  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_, kRun.load());
+  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_,
+        kRun.load());
   if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRun.load())
@@ -139,7 +142,8 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
 }
 
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
-  ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__, upper, lower, enable, restart, kRun.load());
+  ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__,
+        upper, lower, enable, restart, kRun.load());
   if (!verifyConfig(lower, upper))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   if (lower == -1 && restart)
@@ -150,7 +154,8 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   SetProperty(kSmartChargeEnabledProp, pair.fromPair());
   if (enable) {
     kRun.store(true);
-    kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); }, restart);
+    kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); },
+                      restart);
   } else {
     kRun.store(false);
   }

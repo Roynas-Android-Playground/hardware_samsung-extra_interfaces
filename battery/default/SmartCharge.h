@@ -8,8 +8,9 @@
 
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
 
-#include "ThreadPool.h"
 #include <atomic>
+
+#include "ThreadPool.h"
 
 namespace aidl {
 namespace vendor {
