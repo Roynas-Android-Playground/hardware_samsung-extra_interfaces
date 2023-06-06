@@ -69,6 +69,7 @@ class BatteryHelper {
 
  public:
   static void setChargable(bool enable) {
+    ALOGD("%s: enable: %d", __func__, enable);
     WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
   }
   static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
@@ -117,11 +118,18 @@ SmartCharge::SmartCharge(void) {
 void SmartCharge::startLoop(bool withrestart) {
   ALOGD("%s: ++", __func__);
   while (kRun.load()) {
-    if (BatteryHelper::getPercent() > upper)
+    auto per = BatteryHelper::getPercent();
+    if (per < 0) {
+	kRun.store(false);
+	SetProperty(kSmartChargeConfigProp, ConfigPair{0,0}.fromPair());
+	ALOGE("%s: exit loop: per %d", __func__, per);
+	break;
+    }
+    if (per > upper)
       BatteryHelper::setChargable(false);
-    else if (withrestart && BatteryHelper::getPercent() < lower)
+    else if (withrestart && per < lower)
       BatteryHelper::setChargable(true);
-    else if (!withrestart && BatteryHelper::getPercent() == upper - 1)
+    else if (!withrestart && per <= upper - 1)
       BatteryHelper::setChargable(true);
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
