@@ -72,7 +72,6 @@ class BatteryHelper {
 
  public:
   static void setChargable(bool enable) {
-    ALOGD("%s: enable: %d", __func__, enable);
     WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
   }
   static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
@@ -122,18 +121,39 @@ void SmartCharge::startLoop(bool withrestart) {
   ALOGD("%s: ++", __func__);
   while (kRun.load()) {
     auto per = BatteryHelper::getPercent();
+    enum ChargeStatus {
+      ON,
+      OFF,
+      NOOP,
+    };
+    ChargeStatus status = ChargeStatus::NOOP, tmp;
     if (per < 0) {
-	kRun.store(false);
-	SetProperty(kSmartChargeConfigProp, ConfigPair{0,0}.fromPair());
-	ALOGE("%s: exit loop: per %d", __func__, per);
-	break;
+      kRun.store(false);
+      SetProperty(kSmartChargeEnabledProp, ConfigPair{0, 0}.fromPair());
+      ALOGE("%s: exit loop: per %d", __func__, per);
+      break;
     }
     if (per > upper)
-      BatteryHelper::setChargable(false);
+      tmp = ChargeStatus::OFF;
     else if (withrestart && per < lower)
-      BatteryHelper::setChargable(true);
+      tmp = ChargeStatus::ON;
     else if (!withrestart && per <= upper - 1)
-      BatteryHelper::setChargable(true);
+      tmp = ChargeStatus::ON;
+    else
+      tmp = ChargeStatus::NOOP;
+    if (tmp != status) {
+      switch (tmp) {
+        case ChargeStatus::OFF:
+          BatteryHelper::setChargable(false);
+          break;
+        case ChargeStatus::ON:
+          BatteryHelper::setChargable(true);
+          break;
+        default:
+          break;
+      }
+      status = tmp;
+    }
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
   ALOGD("%s: --", __func__);
