@@ -9,6 +9,8 @@
 #include <android-base/file.h>
 #include <android-base/properties.h>
 
+#include <log/log.h>
+
 #include <sstream>
 
 namespace aidl {
@@ -91,20 +93,25 @@ SmartCharge::SmartCharge(void) {
     if (ret.has_value() && verifyConfig(ret->first, ret->second)) {
       upper = ret->second;
       lower = ret->first;
+      ALOGD("%s: upper: %d, lower: %d", __func__,  upper, lower);
     } else {
       upper = -1;
       lower = -1;
+      ALOGW("%s: Parsing config failed", __func__);
       return;
     }
     ret = getAndParseIfPossible(kSmartChargeEnabledProp);
     if (ret.has_value() && !!ret->first) {
+      ALOGD("%s: Starting loop, withrestart: %d", __func__, !!ret->second);
       kRun.store(true);
       startLoop(!!ret->second);
-    }
+    } else
+      ALOGV("%s: Not starting loop", __func__);
   });
 }
 
 void SmartCharge::startLoop(bool withrestart) {
+  ALOGD("%s: ++", __func__);
   while (kRun.load()) {
     if (BatteryHelper::getPercent() > upper)
       BatteryHelper::setChargable(false);
@@ -114,9 +121,11 @@ void SmartCharge::startLoop(bool withrestart) {
       BatteryHelper::setChargable(true);
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
+  ALOGD("%s: --", __func__);
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
+  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_, kRun.load());
   if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRun.load())
@@ -125,10 +134,12 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
   SetProperty(kSmartChargeConfigProp, pair.fromPair());
   lower = lower_;
   upper = upper_;
+  ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
+  ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__, upper, lower, enable, restart, kRun.load());
   if (!verifyConfig(lower, upper))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   if (lower == -1 && restart)
@@ -143,6 +154,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   } else {
     kRun.store(false);
   }
+  ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
 }
 
