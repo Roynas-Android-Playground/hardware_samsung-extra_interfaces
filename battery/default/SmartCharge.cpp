@@ -83,7 +83,7 @@ static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
 }
 
 static inline bool verifyConfig(const int lower, const int upper) {
-  return !(upper <= lower || upper > 95 || lower < 50);
+  return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
 }
 
 SmartCharge::SmartCharge(void) {
