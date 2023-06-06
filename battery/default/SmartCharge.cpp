@@ -90,26 +90,28 @@ static inline bool verifyConfig(const int lower, const int upper) {
 
 SmartCharge::SmartCharge(void) {
   kPoolPtr = std::make_shared<ThreadPool>(3);
+#define func "<constructor>"
   kPoolPtr->Enqueue([this] {
     auto ret = getAndParseIfPossible(kSmartChargeConfigProp);
     if (ret.has_value() && verifyConfig(ret->first, ret->second)) {
       upper = ret->second;
       lower = ret->first;
-      ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
+      ALOGD("%s: upper: %d, lower: %d", func, upper, lower);
     } else {
       upper = -1;
       lower = -1;
-      ALOGW("%s: Parsing config failed", __func__);
+      ALOGW("%s: Parsing config failed", func);
       return;
     }
     ret = getAndParseIfPossible(kSmartChargeEnabledProp);
     if (ret.has_value() && !!ret->first) {
-      ALOGD("%s: Starting loop, withrestart: %d", __func__, !!ret->second);
+      ALOGD("%s: Starting loop, withrestart: %d", func, !!ret->second);
       kRun.store(true);
       startLoop(!!ret->second);
     } else
-      ALOGV("%s: Not starting loop", __func__);
+      ALOGD("%s: Not starting loop", func);
   });
+#undef func
 }
 
 void SmartCharge::startLoop(bool withrestart) {
