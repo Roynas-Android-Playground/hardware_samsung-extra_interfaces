@@ -94,16 +94,13 @@ SmartCharge::SmartCharge(void) {
     } else {
       upper = -1;
       lower = -1;
-      kPoolPtr->Shutdown();
+      return;
     }
-  });
-  kPoolPtr->Enqueue([this] {
-    if (upper == -1 && lower == -1) return;
-    auto ret = getAndParseIfPossible(kSmartChargeEnabledProp);
+    ret = getAndParseIfPossible(kSmartChargeEnabledProp);
     if (ret.has_value() && !!ret->first) {
+      kRun.store(true);
       startLoop(!!ret->second);
     }
-    kPoolPtr->Shutdown();
   });
 }
 
@@ -122,7 +119,7 @@ void SmartCharge::startLoop(bool withrestart) {
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
   if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  if (kPoolPtr && kPoolPtr->isRunning())
+  if (kRun.load())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.fromPair());
@@ -136,21 +133,15 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   if (lower == -1 && restart)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  if (kPoolPtr && !kPoolPtr->isRunning()) {
-    // Dead pointer, reset it.
-    kPoolPtr.reset();
-  }
-  if (!!kPoolPtr == enable)
+  if (kRun.load() == enable)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   auto pair = ConfigPair{static_cast<int>(enable), static_cast<int>(restart)};
   SetProperty(kSmartChargeEnabledProp, pair.fromPair());
   if (enable) {
     kRun.store(true);
-    kPoolPtr = std::make_shared<ThreadPool>(3);
     kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); }, restart);
   } else {
     kRun.store(false);
-    kPoolPtr->Shutdown();
   }
   return ndk::ScopedAStatus::ok();
 }
