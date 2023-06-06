@@ -191,6 +191,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
                       restart);
   } else {
     kRun.store(false);
+    BatteryHelper::setChargable(true);
   }
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
