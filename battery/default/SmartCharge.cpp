@@ -8,6 +8,7 @@
 
 #include <android-base/file.h>
 #include <android-base/properties.h>
+#include <android-base/strings.h>
 #include <log/log.h>
 
 #include <sstream>
@@ -24,6 +25,8 @@ using ::android::base::WaitForPropertyCreation;
 
 using ::android::base::ReadFileToString;
 using ::android::base::WriteStringToFile;
+
+using ::android::base::Trim;
 
 static constexpr const char *kSmartChargeConfigProp =
     "persist.ext.smartcharge.config";
@@ -60,7 +63,7 @@ class BatteryHelper {
     std::string data;
     ReadFileToString(sysfs, &data);
     try {
-      return stoi(data);
+      return stoi(Trim(data));
     } catch (const std::exception &e) {
       ALOGE("%s: %s for '%s'", __func__, e.what(), data.c_str());
     }
