@@ -23,7 +23,7 @@ int main(int argc, const char **argv) {
     arg2 = std::stoi(argv[2]);
     arg3 = std::stoi(argv[3]);
   } catch (const std::exception &e) {
-    fprintf(stderr, "stoi failed: %s", e.what());
+    fprintf(stderr, "Failed to parse args: %s\n", e.what());
     return 1;
   }
   switch (arg1) {
