@@ -19,6 +19,6 @@
 package vendor.samsung_ext.framework.battery;
 @VintfStability
 interface ISmartCharge {
-  oneway void setChargeLimit(in int upper, in int lower);
-  oneway void activate(in boolean enable, in boolean restart);
+  void setChargeLimit(in int upper, in int lower);
+  void activate(in boolean enable, in boolean restart);
 }

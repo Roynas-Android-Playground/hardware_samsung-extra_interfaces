@@ -15,7 +15,7 @@ interface ISmartCharge {
 	 * less than 1, if [upper] is not higher than [lower]
 	 * or if any of 2 does not fall under 1 ~ 100 range.
 	 */
-	oneway void setChargeLimit(in int upper, in int lower);
+	void setChargeLimit(in int upper, in int lower);
 
 	/**
 	 * Enable/Disable the charge limit framework.
@@ -32,5 +32,5 @@ interface ISmartCharge {
 	 * @throws IllegalArgumentException if [enable] is
 	 * true, and it is already enabled, and vice versa.
 	 */
-	oneway void activate(in boolean enable, in boolean restart);
+	void activate(in boolean enable, in boolean restart);
 }
