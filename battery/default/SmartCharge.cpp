@@ -47,10 +47,15 @@ struct ConfigPair {
     std::string res;
 
     if (v.find(kComma) == std::string::npos) return std::nullopt;
-    getline(ss, res, kComma);
-    first = std::stoi(res);
-    getline(ss, res, kComma);
-    second = std::stoi(res);
+    try {
+      getline(ss, res, kComma);
+      first = std::stoi(res);
+      getline(ss, res, kComma);
+      second = std::stoi(res);
+    } catch (const std::exception &e) {
+      ALOGE("%s: property value %s was tampered: %s", __func__, v, e.what());
+      return std::nullopt;
+    }
     return std::optional<ConfigPair>({first, second});
   }
 };
