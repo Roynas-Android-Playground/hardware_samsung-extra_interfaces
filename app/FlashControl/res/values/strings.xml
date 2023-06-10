@@ -24,4 +24,8 @@
     <!-- On Off -->
     <string name="on">on</string>
     <string name="off">off</string>
+
+    <!-- Categories -->
+    <string name="flash_status_category">Current Flash Status</string>
+    <string name="flash_intesities_category">Available Intesities</string>
 </resources>
