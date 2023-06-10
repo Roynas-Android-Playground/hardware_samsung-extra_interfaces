@@ -7,7 +7,7 @@
     <string name="flash_enable_title">Enable Flashlight</string>
 
     <!-- Intro -->
-    <string name="flash_footer_summary">Control the intesity of the flashlight. Values can be changed when flash is on.</string>
+    <string name="flash_footer_summary">Control the intesity of the flashlight. Values can be changed when flash is on. Select the brightnesses here and it will be applied to all innovations of turning flash on. While the QS panel flash is on, the app can not turn off flash and this behavior is intended.</string>
 
     <!-- Modes -->
     <string name="flash_intesity_1">Brightness 1</string>
