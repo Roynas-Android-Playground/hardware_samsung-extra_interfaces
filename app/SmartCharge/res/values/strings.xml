@@ -1,0 +1,15 @@
+<resources>
+    <string name="app_name">SmartChargeControl</string>
+    <string name="smart_charge_title">Smart Charging</string>
+    <string name="smart_charge_enable_title">Enable Controlled Charging</string>
+    <string name="smart_charge_config">Config</string>
+    <string name="smart_charge_percent_config">Percent Config</string>
+    <string name="smart_charge_current_config">Current Config</string>
+    <string name="smart_charge_restart_title">Restart Charging Support</string>
+    <string name="smart_charge_restart_summary">Instead of keeping battery percentage at a certain percent,
+        this will restart charging when battery percent go under than the config value</string>
+    <string name="smart_charge_stop">Charging stops at %d%%</string>
+    <string name="smart_charge_restart">Charging restarts at %d%%</string>
+    <string name="smart_charge_invalid_config">Invalid Config</string>
+    <string name="smart_charge_internal_error">Internal Error, Try Again</string>
+</resources>

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:title="@string/smart_charge_title">
+
+    <com.android.settingslib.widget.MainSwitchPreference
+        android:defaultValue="false"
+        android:key="smart_charge_enable"
+        android:title="@string/smart_charge_enable_title" />
+
+    <PreferenceCategory
+        android:title="@string/smart_charge_current_config">
+        <SwitchPreference
+            android:key="smart_charge_restart_enabled"
+            android:title="@string/smart_charge_restart_title"
+            android:summary="@string/smart_charge_restart_summary"
+            android:defaultValue="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/smart_charge_percent_config">
+        <SeekBarPreference
+            android:key="smart_charge_stop_cfg"
+            android:max="95"
+            android:min="50"/>
+        <SeekBarPreference
+            android:key="smart_charge_restart_cfg"
+            android:max="95"
+            android:min="50"/>
+    </PreferenceCategory>
+
+</PreferenceScreen>

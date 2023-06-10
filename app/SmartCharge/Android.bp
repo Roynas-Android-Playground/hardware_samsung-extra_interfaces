@@ -1,0 +1,17 @@
+android_app {
+    name: "SmartCharge",
+    srcs: [
+        "src/**/*.kt",
+    ],
+    platform_apis: true,
+    certificate: "platform",
+    static_libs: [
+        "androidx.preference_preference",
+        "vendor.samsung_ext.framework.battery-V1-java",
+    ],
+    defaults: ["SettingsLibDefaults"],
+    required: [
+        "vendor.samsung_ext.framework.battery-service",
+    ],
+    system_ext_specific: true,
+}
