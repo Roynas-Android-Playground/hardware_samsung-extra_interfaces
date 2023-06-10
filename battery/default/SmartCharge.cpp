@@ -53,7 +53,7 @@ struct ConfigPair {
       getline(ss, res, kComma);
       second = std::stoi(res);
     } catch (const std::exception &e) {
-      ALOGE("%s: property value %s was tampered: %s", __func__, v, e.what());
+      ALOGE("%s: property value '%s' was tampered: %s", __func__, v.c_str(), e.what());
       return std::nullopt;
     }
     return std::optional<ConfigPair>({first, second});
