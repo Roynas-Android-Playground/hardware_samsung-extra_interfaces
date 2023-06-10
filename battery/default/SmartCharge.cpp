@@ -170,7 +170,7 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.fromPair());
-  lower = lower_;
+  lower = lower_ < 0 ? -1 : lower_;
   upper = upper_;
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
