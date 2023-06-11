@@ -84,11 +84,6 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
             }
             mRestartBar.isEnabled = new
             mSharedPreferences.edit().putBoolean(PREF_ENABLE_RESTART, new).apply()
-            runCatching {
-                mService?.activate(false, /*unused*/false)
-            }.onSuccess {
-                mService?.activate(true, new)
-            }
             true
         }
         val kSeekBarListener = Preference.OnPreferenceChangeListener { preference, newValue ->
