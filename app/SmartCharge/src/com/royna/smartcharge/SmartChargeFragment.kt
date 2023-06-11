@@ -137,8 +137,8 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         runCatching {
             if (isChecked) { when (mConfig) {
                 Config.STOP_RESTART -> {
-                    mService?.setChargeLimit(mSharedPreferences.getIntZ(PREF_STOP_CFG),
-                        mSharedPreferences.getIntZ(PREF_RESTART_CFG))
+                    try { mService?.setChargeLimit(mSharedPreferences.getIntZ(PREF_STOP_CFG),
+                        mSharedPreferences.getIntZ(PREF_RESTART_CFG)) } catch (e: IllegalArgumentException) { throw IllegalStateException() }
                 }
                 Config.STOP -> {
                     mService?.setChargeLimit(mSharedPreferences.getIntZ(PREF_STOP_CFG),-1)
