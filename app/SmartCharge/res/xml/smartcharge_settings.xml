@@ -21,12 +21,10 @@
         android:title="@string/smart_charge_percent_config">
         <SeekBarPreference
             android:key="smart_charge_stop_cfg"
-            android:max="95"
-            android:min="50"/>
+            android:max="95"/>
         <SeekBarPreference
             android:key="smart_charge_restart_cfg"
-            android:max="95"
-            android:min="50"/>
+            android:max="95"/>
     </PreferenceCategory>
 
 </PreferenceScreen>

@@ -69,7 +69,9 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         mMainSwitch.setChecked(mSharedPreferences.getBoolean(PREF_SMTCHG_ENABLE, false))
         mRestartEnableSwitch.isChecked = mSharedPreferences.getBoolean(PREF_ENABLE_RESTART, false)
         mStopBar.value = mSharedPreferences.getInt(PREF_STOP_CFG, 80)
+	mStopBar.min = 50
         mRestartBar.value = mSharedPreferences.getInt(PREF_RESTART_CFG, 70)
+	mRestartBar.min = 50
         mRestartBar.isEnabled = mRestartEnableSwitch.isChecked
         mConfig = if (mRestartEnableSwitch.isChecked) {Config.STOP_RESTART} else {Config.STOP}
 
