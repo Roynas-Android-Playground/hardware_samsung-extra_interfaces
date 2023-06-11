@@ -173,9 +173,9 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
             }
         }.onSuccess {
             mSharedPreferences.edit().putBoolean(PREF_SMTCHG_ENABLE, isChecked).apply()
-            mRestartBar.isEnabled = !isChecked
             mStopBar.isEnabled = !isChecked
 	    mRestartEnableSwitch.isEnabled = !isChecked
+            mRestartBar.isEnabled = mRestartEnableSwitch.isChecked && !isChecked
         }
     }
 
