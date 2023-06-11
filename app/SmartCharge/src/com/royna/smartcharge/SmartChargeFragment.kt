@@ -69,20 +69,28 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         mMainSwitch.setChecked(mSharedPreferences.getBoolean(PREF_SMTCHG_ENABLE, false))
         mRestartEnableSwitch.isChecked = mSharedPreferences.getBoolean(PREF_ENABLE_RESTART, false)
         mStopBar.value = mSharedPreferences.getInt(PREF_STOP_CFG, 80)
-	mStopBar.min = 50
+	mStopBar.min = MIN
         mRestartBar.value = mSharedPreferences.getInt(PREF_RESTART_CFG, 70)
-	mRestartBar.min = 50
+	mRestartBar.min = MIN
         mRestartBar.isEnabled = mRestartEnableSwitch.isChecked
         mConfig = if (mRestartEnableSwitch.isChecked) {Config.STOP_RESTART} else {Config.STOP}
 
         mMainSwitch.addOnSwitchChangeListener(this)
-        mRestartEnableSwitch.setOnPreferenceChangeListener { _, new ->
+        mRestartEnableSwitch.setOnPreferenceChangeListener { p, new ->
             mConfig = if (new as Boolean) {
                 Config.STOP_RESTART
             } else {
                 Config.STOP
             }
             mRestartBar.isEnabled = new
+	    if (new) {
+                 val mStop = mSharedPreferences.getInt(PREF_STOP_CFG, 80)
+                 if (mStop <= mSharedPreferences.getInt(PREF_RESTART_CFG, 70)) { 
+                      mMainHandler.post { mRestartBar.value = (mStop - MIN) / 2 + MIN }
+                      mSharedPreferences.edit().putInt(PREF_RESTART_CFG, mRestartBar.value).apply()
+                      updateSeekbarTitles(mapOf(p.key to mRestartBar.value))
+                 }
+            }
             mSharedPreferences.edit().putBoolean(PREF_ENABLE_RESTART, new).apply()
             true
         }
@@ -175,6 +183,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         private const val PREF_RESTART_CFG = "smart_charge_restart_cfg"
         private const val PREF_ENABLE_RESTART = "smart_charge_restart_enabled"
         private const val TAG = "SmartChargeApp"
+        private const val MIN = 50
         private val kSeekPrefMap = mapOf (
             PREF_RESTART_CFG to R.string.smart_charge_restart,
             PREF_STOP_CFG to R.string.smart_charge_stop
