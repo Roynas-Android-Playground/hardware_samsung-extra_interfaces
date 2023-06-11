@@ -53,7 +53,8 @@ struct ConfigPair {
       getline(ss, res, kComma);
       second = std::stoi(res);
     } catch (const std::exception &e) {
-      ALOGE("%s: property value '%s' was tampered: %s", __func__, v.c_str(), e.what());
+      ALOGE("%s: property value '%s' was tampered: %s", __func__, v.c_str(),
+            e.what());
       return std::nullopt;
     }
     return std::optional<ConfigPair>({first, second});
@@ -169,9 +170,12 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
   if (kRun.load())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
-  SetProperty(kSmartChargeConfigProp, pair.fromPair());
-  lower = lower_ < 0 ? -1 : lower_;
-  upper = upper_;
+  {
+    std::unique_lock<std::mutex> _(config_lock);
+    SetProperty(kSmartChargeConfigProp, pair.fromPair());
+    lower = lower_ < 0 ? -1 : lower_;
+    upper = upper_;
+  }
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
 }
@@ -186,7 +190,10 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   if (kRun.load() == enable)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   auto pair = ConfigPair{static_cast<int>(enable), static_cast<int>(restart)};
-  SetProperty(kSmartChargeEnabledProp, pair.fromPair());
+  {
+    std::unique_lock<std::mutex> _(config_lock);
+    SetProperty(kSmartChargeEnabledProp, pair.fromPair());
+  }
   if (enable) {
     kRun.store(true);
     kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); },

@@ -9,6 +9,7 @@
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
 
 #include <atomic>
+#include <mutex>
 
 #include "ThreadPool.h"
 
@@ -23,6 +24,7 @@ class SmartCharge : public BnSmartCharge {
   int upper, lower;
   void startLoop(bool withrestart);
   std::atomic_bool kRun;
+  std::mutex config_lock;
 
  public:
   SmartCharge();
