@@ -133,7 +133,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
 
     override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
         runCatching {
-            when (mConfig) {
+            if (isChecked) { when (mConfig) {
                 Config.STOP_RESTART -> {
                     mService?.setChargeLimit(mSharedPreferences.getIntZ(PREF_STOP_CFG),
                         mSharedPreferences.getIntZ(PREF_RESTART_CFG))
@@ -141,7 +141,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
                 Config.STOP -> {
                     mService?.setChargeLimit(mSharedPreferences.getIntZ(PREF_STOP_CFG),-1)
                 }
-            }
+            }}
             mService?.activate(isChecked, mSharedPreferences.getBoolean(PREF_ENABLE_RESTART, false))
         }.onFailure {
             when (it) {
@@ -166,6 +166,9 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
             }
         }.onSuccess {
             mSharedPreferences.edit().putBoolean(PREF_SMTCHG_ENABLE, isChecked).apply()
+            mRestartBar.isEnabled = !isChecked
+            mStopBar.isEnabled = !isChecked
+	    mRestartEnableSwitch.isEnabled = !isChecked
         }
     }
 
