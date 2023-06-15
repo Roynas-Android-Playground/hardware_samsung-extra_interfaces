@@ -31,7 +31,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
             if (p0 == TelephonyManager.CALL_STATE_OFFHOOK) {
                 AudioSystem.setParameters("g_call_state=514") // CALL_STATUS_VOLTE_CP_VOICE_CALL_ON
             } else {
-                AudioSystem.setParameters("g_call_state=1") // CALL_STATUS_CS_VOICE_CP_VIDEO_CALL_OFF
+                AudioSystem.setParameters("g_call_state=257") // CALL_STATUS_VOLTE_CP_VOICE_VIDEO_CALL_OFF
             }
         }
     }
