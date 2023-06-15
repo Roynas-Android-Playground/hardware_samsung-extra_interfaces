@@ -1,5 +1,9 @@
-java_library {
-   name: "CallVolume",
-   installable: true,
-   srcs: ["src/**/*.kt"],
+android_app {
+    name: "CallVolume",
+    srcs: [
+        "src/**/*.kt",
+    ],
+    platform_apis: true,
+    certificate: "platform",
+    system_ext_specific: true,
 }
