@@ -129,7 +129,8 @@ void SmartCharge::startLoop(bool withrestart) {
       OFF,
       NOOP,
     };
-    ChargeStatus status = ChargeStatus::NOOP, tmp;
+    static ChargeStatus status = ChargeStatus::NOOP;
+    ChargeStatus tmp;
     if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, ConfigPair{0, 0}.fromPair());
