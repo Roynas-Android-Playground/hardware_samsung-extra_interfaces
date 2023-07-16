@@ -7,6 +7,7 @@
 #include "Flashlight.h"
 
 #include <android-base/file.h>
+#include <android-base/properties.h>
 
 namespace aidl {
 namespace vendor {
@@ -15,10 +16,13 @@ namespace hardware {
 namespace camera {
 namespace flashlight {
 
+using ::android::base::GetProperty;
 using ::android::base::ReadFileToString;
+using ::android::base::SetProperty;
 using ::android::base::WriteStringToFile;
 
 static constexpr const char* FLASH_NODE = "/sys/class/camera/flash/rear_flash";
+static constexpr const char *FLASH_BRIGHTNESS_PROP = "persist.ext.flashlight.last_brightness";
 
 ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
     std::string value;
@@ -32,9 +36,11 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
 		    *_aidl_return = 0;
 		    break;
 	    case 1:
-		    // If last written is 1, we are really not so sure it is still level_saved.
-		    // But QS flash writes 1 anyway.
-		    *_aidl_return = level_saved;
+		    try {
+			    *_aidl_return = std::stoi(GetProperty(FLASH_BRIGHTNESS_PROP, "1"));
+		    } catch (const std::exception &) {
+			    *_aidl_return = level_saved;
+		    }
 		    break;
 	    case 1001:
 		    *_aidl_return = 1;
@@ -83,6 +89,7 @@ ndk::ScopedAStatus Flashlight::setBrightness(int32_t level) {
 		break;
     }
     WriteStringToFile(std::to_string(writeval), FLASH_NODE);
+    SetProperty(FLASH_BRIGHTNESS_PROP, std::to_string(level));
     level_saved = level;
     return ndk::ScopedAStatus::ok();
 }
