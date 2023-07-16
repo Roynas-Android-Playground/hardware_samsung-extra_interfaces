@@ -4,15 +4,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_TAG "android.hardware.lights-service.samsung"
+#define LOG_TAG "android.hardware.lights-service.samsung_ext"
 
 #include <android-base/stringprintf.h>
+#include <android-base/properties.h>
+
 #include <fstream>
+#include <mutex>
 
 #include "Lights.h"
 
-#define COLOR_MASK 0x00ffffff
-#define MAX_INPUT_BRIGHTNESS 255
+constexpr const int COLOR_MASK = 0x00ffffff;
+constexpr const int MAX_INPUT_BRIGHTNESS = 255;
+constexpr const float SUNLIGHT_RATIO = 0.9f;
+constexpr const int ALLOW_SUNLIGHT = MAX_INPUT_BRIGHTNESS * SUNLIGHT_RATIO;
+static const char SUNLIGHT_ENABLED_PROP[] = "persist.ext.light.sunlight_on";
 
 namespace aidl {
 namespace android {
@@ -71,9 +77,16 @@ ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) 
 }
 
 void Lights::handleBacklight(const HwLightState& state) {
-    uint32_t max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS);
+    static uint32_t max_brightness;
     uint32_t brightness = rgbToBrightness(state);
+    const static std::string false_s = std::to_string(false);
+    static std::once_flag once;
+    using ::android::base::GetProperty;
 
+    std::call_once(once, []{ max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS); });
+    if (GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == false_s) {
+        if (brightness > ALLOW_SUNLIGHT) brightness *= SUNLIGHT_RATIO;
+    }
     if (max_brightness != MAX_INPUT_BRIGHTNESS) {
         brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
     }
