@@ -5,3 +5,5 @@ type hal_samsung_camera_flashlight_default_exec, exec_type, system_file_type, fi
 init_daemon_domain(hal_samsung_camera_flashlight_default)
 
 binder_call(hal_samsung_camera_flashlight_default, servicemanager);
+set_prop(hal_samsung_camera_flashlight_default, ext_flashlight_prop);
+get_prop(hal_samsung_camera_flashlight_default, ext_flashlight_prop);
