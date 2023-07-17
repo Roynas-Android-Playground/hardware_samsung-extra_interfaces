@@ -17,7 +17,6 @@
 constexpr const int COLOR_MASK = 0x00ffffff;
 constexpr const int MAX_INPUT_BRIGHTNESS = 255;
 constexpr const float SUNLIGHT_RATIO = 0.9f;
-constexpr const int ALLOW_SUNLIGHT = MAX_INPUT_BRIGHTNESS * SUNLIGHT_RATIO;
 static const char SUNLIGHT_ENABLED_PROP[] = "persist.ext.light.sunlight_on";
 
 namespace aidl {
@@ -85,7 +84,7 @@ void Lights::handleBacklight(const HwLightState& state) {
 
     std::call_once(once, []{ max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS); });
     if (GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == false_s) {
-        if (brightness > ALLOW_SUNLIGHT) brightness *= SUNLIGHT_RATIO;
+        brightness *= SUNLIGHT_RATIO;
     }
     if (max_brightness != MAX_INPUT_BRIGHTNESS) {
         brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
