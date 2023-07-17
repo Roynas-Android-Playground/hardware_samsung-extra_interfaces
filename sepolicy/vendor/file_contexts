@@ -1,1 +1,1 @@
-/(vendor|system/vendor)/bin/hw/android\.hardware\.light-service\.samsung_ext           u:object_r:hal_light_default_exec:s0
+/(vendor|system/vendor)/bin/hw/vendor\.samsung_ext\.hardware\.light-service        u:object_r:hal_light_default_exec:s0

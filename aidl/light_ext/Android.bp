@@ -1,23 +1,17 @@
-//
-// Copyright (C) 2021 The LineageOS Project
-//
-// SPDX-License-Identifier: Apache-2.0
-//
-
-cc_binary {
-    name: "android.hardware.light-service.samsung_ext",
-    relative_install_path: "hw",
-    init_rc: ["android.hardware.light-service.samsung_ext.rc"],
-    vintf_fragments: ["android.hardware.light-service.samsung_ext.xml"],
-    local_include_dirs: ["include"],
-    srcs: [
-        "Lights.cpp",
-        "service.cpp",
+aidl_interface {
+    name: "vendor.samsung_ext.hardware.light",
+    srcs: ["vendor/samsung_ext/hardware/light/*.aidl"],
+    stability: "vintf",
+    backend: {
+        java: {
+            platform_apis: true,
+        },
+    },
+    versions_with_info: [
+        {
+            version: "1",
+            imports: [],
+        },
     ],
-    shared_libs: [
-        "libbase",
-        "libbinder_ndk",
-        "android.hardware.light-V1-ndk",
-    ],
-    vendor: true,
+    vendor_available: true,
 }

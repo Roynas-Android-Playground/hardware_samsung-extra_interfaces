@@ -1,0 +1,5 @@
+service vendor.light-default /vendor/bin/hw/vendor.samsung_ext.hardware.light-service
+    class hal
+    user system
+    group system
+    shutdown critical

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#define LOG_TAG "android.hardware.lights-service.samsung_ext"
+#define LOG_TAG "vendor.samsung_ext.hardware.lights-service"
 
 #include <android-base/stringprintf.h>
 #include <android-base/properties.h>
@@ -75,12 +75,13 @@ ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) 
     return ndk::ScopedAStatus::ok();
 }
 
-void Lights::handleBacklight(const HwLightState& state) {
-    static uint32_t max_brightness;
-    uint32_t brightness = rgbToBrightness(state);
+void Lights::handleBacklight_brightness(const uint32_t brightness_s) {
+    static uint32_t max_brightness, brightness;
     const static std::string false_s = std::to_string(false);
     static std::once_flag once;
     using ::android::base::GetProperty;
+
+    if (brightness_s != 0) brightness = brightness_s;
 
     std::call_once(once, []{ max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS); });
     if (GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == false_s) {
@@ -91,6 +92,10 @@ void Lights::handleBacklight(const HwLightState& state) {
     }
 
     set(PANEL_BRIGHTNESS_NODE, brightness);
+}
+
+void Lights::handleBacklight(const HwLightState& state) {
+    handleBacklight_brightness(rgbToBrightness(state));
 }
 
 #ifdef BUTTON_BRIGHTNESS_NODE

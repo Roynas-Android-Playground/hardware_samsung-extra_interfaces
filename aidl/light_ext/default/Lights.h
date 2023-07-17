@@ -25,6 +25,8 @@ public:
     ndk::ScopedAStatus setLightState(int32_t id, const HwLightState& state) override;
     ndk::ScopedAStatus getLights(std::vector<HwLight> *_aidl_return) override;
 
+    static void handleBacklight_brightness(const uint32_t brightness);
+
 private:
     void handleBacklight(const HwLightState& state);
 #ifdef BUTTON_BRIGHTNESS_NODE
