@@ -1,0 +1,16 @@
+cc_binary {
+   name: "test_lights",
+   shared_libs: [
+      "libbinder_ndk",
+      "libbase",
+      "android.hardware.light-V1-ndk",
+      "vendor.samsung_ext.hardware.light-V1-ndk"
+   ],
+   header_libs: [
+      "libext_support",
+   ],
+   srcs: [
+      "main.cpp"
+   ],
+   system_ext_specific: true,
+}
