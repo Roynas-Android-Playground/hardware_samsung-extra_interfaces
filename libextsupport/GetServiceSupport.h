@@ -11,3 +11,9 @@ static inline std::shared_ptr<T> getService(const std::string& name)
 	if (!binder) return nullptr;
 	return T::fromBinder(ndk::SpAIBinder(binder));
 }
+
+template <typename T>
+static inline std::shared_ptr<T> getServiceDefault(void)
+{
+	return getService<T>(std::string() + T::descriptor + "/default");
+}
