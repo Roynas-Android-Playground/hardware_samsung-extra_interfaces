@@ -9,6 +9,7 @@ cc_binary {
     relative_install_path: "hw",
     init_rc: ["vendor.samsung_ext.hardware.light-service.rc"],
     vintf_fragments: ["vendor.samsung_ext.hardware.light-service.xml"],
+    overrides: ["android.hardware.light-service.samsung"],
     local_include_dirs: ["include"],
     srcs: [
         "Lights.cpp",
