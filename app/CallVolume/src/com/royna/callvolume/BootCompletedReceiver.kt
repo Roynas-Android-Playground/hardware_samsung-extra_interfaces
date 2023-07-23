@@ -24,6 +24,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.telephony.TelephonyCallback
 import android.telephony.TelephonyManager
+import android.util.Log
 
 class BootCompletedReceiver : BroadcastReceiver() {
     private val telephonyCallback: TelephonyCallback = object : TelephonyCallback(), TelephonyCallback.CallStateListener {
@@ -38,6 +39,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val handler = Handler(HandlerThread("CallThread").apply { start() }.looper)
 
+        Log.i("CallVolume-APP", "onReceive");
         val tm = context.getSystemService(TelephonyManager::class.java)
         tm.registerTelephonyCallback({ p0 -> handler.post(p0) }, telephonyCallback)
     }
