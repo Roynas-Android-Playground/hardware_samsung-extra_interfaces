@@ -17,8 +17,7 @@ using android::base::GetProperty;
 using android::base::SetProperty;
 
 int main(void) {
-  static const std::string kInstance = std::string() + ILights::descriptor + "/default",
-                           false_s = std::to_string(false);
+  static const std::string false_s = std::to_string(false);
   std::string propval;
   android::status_t status;
   std::shared_ptr<IExtLights> extsvc;
@@ -26,7 +25,7 @@ int main(void) {
   ndk::SpAIBinder BExtLights;
   bool enable_todo = false;
 
-  auto svc = getService<ILights>(kInstance);
+  auto svc = getServiceDefault<ILights>();
   if (!svc) {
     printf("getService returned null\n");
     goto exit;

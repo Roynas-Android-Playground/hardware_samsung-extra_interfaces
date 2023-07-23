@@ -11,8 +11,7 @@ int main(int argc, const char **argv) {
     fprintf(stderr, "           cmd_num -> 1: setChargeLimit, 2: activate\n");
     return 1;
   }
-  auto svc = getService<ISmartCharge>(
-      "vendor.samsung_ext.framework.battery.ISmartCharge/default");
+  auto svc = getServiceDefault<ISmartCharge>();
   if (!svc) {
     fprintf(stderr, "getService returned null\n");
     return 1;

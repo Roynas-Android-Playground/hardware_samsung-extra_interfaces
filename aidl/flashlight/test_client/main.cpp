@@ -11,7 +11,7 @@
 using aidl::vendor::samsung_ext::hardware::camera::flashlight::IFlashlight;
 
 int main(void) {
-  auto svc = getService<IFlashlight>("vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default");
+  auto svc = getServiceDefault<IFlashlight>();
   if (!svc) {
     printf("getService returned null\n");
     return 1;
