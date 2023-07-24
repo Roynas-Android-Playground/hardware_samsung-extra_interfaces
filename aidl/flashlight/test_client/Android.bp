@@ -1,15 +1,15 @@
 cc_binary {
-   name: "test_flashlight",
-   shared_libs: [
-      "libbinder_ndk",
-      "libbase",
-      "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk"
-   ],
-   header_libs: [
-      "libext_support",
-   ],
-   srcs: [
-      "main.cpp"
-   ],
-   system_ext_specific: true,
+    name: "test_flashlight",
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
+    ],
+    header_libs: [
+        "libext_support",
+    ],
+    srcs: [
+        "main.cpp",
+    ],
+    system_ext_specific: true,
 }

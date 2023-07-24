@@ -16,7 +16,7 @@ cc_binary {
     shared_libs: [
         "libbase",
         "libbinder_ndk",
-	"liblog",
+        "liblog",
         "libsafestoi",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],

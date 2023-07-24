@@ -12,14 +12,14 @@ cc_binary {
     overrides: ["android.hardware.light-service.samsung"],
     local_include_dirs: ["include"],
     srcs: [
-        "Lights.cpp",
         "ExtLights.cpp",
+        "Lights.cpp",
         "service.cpp",
     ],
     shared_libs: [
+        "android.hardware.light-V1-ndk",
         "libbase",
         "libbinder_ndk",
-        "android.hardware.light-V1-ndk",
         "vendor.samsung_ext.hardware.light-V1-ndk",
     ],
     vendor: true,

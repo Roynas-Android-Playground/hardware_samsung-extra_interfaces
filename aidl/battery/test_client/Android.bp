@@ -1,17 +1,17 @@
 cc_binary {
-   name: "test_smartcharge",
-   shared_libs: [
-      "libbinder_ndk",
-      "libbase",
-      "libsafestoi",
-      "vendor.samsung_ext.framework.battery-V1-ndk"
-   ],
-   header_libs: [
-      "libext_support",
-   ],
-   srcs: [
-      "main.cpp"
-   ],
-   cpp_std: "c++17",
-   system_ext_specific: true,
+    name: "test_smartcharge",
+    shared_libs: [
+        "libbase",
+        "libbinder_ndk",
+        "libsafestoi",
+        "vendor.samsung_ext.framework.battery-V1-ndk",
+    ],
+    header_libs: [
+        "libext_support",
+    ],
+    srcs: [
+        "main.cpp",
+    ],
+    cpp_std: "c++17",
+    system_ext_specific: true,
 }
