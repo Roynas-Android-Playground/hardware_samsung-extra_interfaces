@@ -3,6 +3,7 @@ cc_binary {
    shared_libs: [
       "libbinder_ndk",
       "libbase",
+      "libsafestoi",
       "vendor.samsung_ext.framework.battery-V1-ndk"
    ],
    header_libs: [
@@ -11,6 +12,6 @@ cc_binary {
    srcs: [
       "main.cpp"
    ],
-   cppflags: ["-fexceptions"],
+   cpp_std: "c++17",
    system_ext_specific: true,
 }
