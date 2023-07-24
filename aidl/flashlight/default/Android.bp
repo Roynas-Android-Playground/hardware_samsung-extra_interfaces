@@ -10,8 +10,8 @@ cc_binary {
     shared_libs: [
         "libbase",
         "libbinder_ndk",
+        "libsafestoi",
         "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
     ],
-    cppflags: ["-fexceptions"],
     system_ext_specific: true,
 }

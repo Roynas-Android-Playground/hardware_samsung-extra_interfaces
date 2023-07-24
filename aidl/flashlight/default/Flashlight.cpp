@@ -6,6 +6,8 @@
 
 #include "Flashlight.h"
 
+#include <SafeStoi.h>
+
 #include <android-base/file.h>
 #include <android-base/properties.h>
 
@@ -28,19 +30,15 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
     std::string value;
     int intvalue = -1;
 
-    auto ret = ReadFileToString(FLASH_NODE, &value);
-    if (ret) 
-	intvalue = std::stoi(value);
+    ReadFileToString(FLASH_NODE, &value);
+    intvalue = stoi_safe(value).value_or(-1);
     switch (intvalue) {
 	    case 0:
 		    *_aidl_return = 0;
 		    break;
 	    case 1:
-		    try {
-			    *_aidl_return = std::stoi(GetProperty(FLASH_BRIGHTNESS_PROP, "1"));
-		    } catch (const std::exception &) {
-			    *_aidl_return = level_saved;
-		    }
+		    *_aidl_return = stoi_safe(GetProperty(FLASH_BRIGHTNESS_PROP, "1"))
+			    .value_or(level_saved);
 		    break;
 	    case 1001:
 		    *_aidl_return = 1;
