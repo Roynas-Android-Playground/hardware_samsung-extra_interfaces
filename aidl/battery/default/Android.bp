@@ -17,10 +17,10 @@ cc_binary {
         "libbase",
         "libbinder_ndk",
 	"liblog",
+        "libsafestoi",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
     header_libs: ["libext_threadpool"],
     cpp_std: "c++17",
-    cppflags: ["-fexceptions"],
     system_ext_specific: true,
 }

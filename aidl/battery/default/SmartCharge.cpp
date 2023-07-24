@@ -6,6 +6,7 @@
 
 #include "SmartCharge.h"
 
+#include <SafeStoi.h>
 #include <android-base/file.h>
 #include <android-base/properties.h>
 #include <log/log.h>
@@ -42,22 +43,18 @@ struct ConfigPair {
     return std::to_string(first) + kComma + std::to_string(second);
   }
   static std::optional<ConfigPair> fromString(const std::string &v) {
-    int first, second;
+    std::optional<int> first, second;
     std::stringstream ss(v);
     std::string res;
 
-    if (v.find(kComma) == std::string::npos) return std::nullopt;
-    try {
+    if (v.find(kComma) != std::string::npos) {
       getline(ss, res, kComma);
-      first = std::stoi(res);
+      first = stoi_safe(res);
       getline(ss, res, kComma);
-      second = std::stoi(res);
-    } catch (const std::exception &e) {
-      ALOGE("%s: property value '%s' was tampered: %s", __func__, v.c_str(),
-            e.what());
-      return std::nullopt;
+      second = stoi_safe(res);
+      if (first && second) return ConfigPair{*first, *second};
     }
-    return std::optional<ConfigPair>({first, second});
+    return std::nullopt;
   }
 };
 
@@ -65,12 +62,7 @@ class BatteryHelper {
   static int _readSysfs(const char *sysfs) {
     std::string data;
     ReadFileToString(sysfs, &data);
-    try {
-      return stoi(data);
-    } catch (const std::exception &e) {
-      ALOGE("%s: %s for '%s'", __func__, e.what(), data.c_str());
-    }
-    return -1;
+    return stoi_safe(data).value_or(-1);
   }
 
  public:
