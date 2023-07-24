@@ -21,9 +21,10 @@ int main() {
     std::shared_ptr<Lights> lights = ndk::SharedRefBase::make<Lights>();
     std::shared_ptr<ExtLights> extlights = ndk::SharedRefBase::make<ExtLights>();
 
+    ndk::SpAIBinder binder = lights->asBinder();
     const std::string instance = std::string() + Lights::descriptor + "/default";
-    CHECK(AIBinder_setExtension(lights->asBinder().get(), extlights->asBinder().get()) == STATUS_OK);
-    binder_status_t status = AServiceManager_addService(lights->asBinder().get(), instance.c_str());
+    CHECK(AIBinder_setExtension(binder.get(), extlights->asBinder().get()) == STATUS_OK);
+    binder_status_t status = AServiceManager_addService(binder.get(), instance.c_str());
     CHECK(status == STATUS_OK);
 
     ABinderProcess_joinThreadPool();
