@@ -4,3 +4,9 @@ cc_library_shared {
     export_include_dirs: ["."],
     cpp_std: "c++17",
 }
+
+cc_defaults {
+    name: "safestoi_defaults",
+    cpp_std: "c++17",
+    shared_libs: ["libstoisafe"],
+}
