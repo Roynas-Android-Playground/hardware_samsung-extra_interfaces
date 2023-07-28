@@ -16,8 +16,10 @@
 
 constexpr const int COLOR_MASK = 0x00ffffff;
 constexpr const int MAX_INPUT_BRIGHTNESS = 255;
-constexpr const float SUNLIGHT_RATIO = 0.9f;
+constexpr const float SUNLIGHT_RATIO = 0.8f;
+
 static const char SUNLIGHT_ENABLED_PROP[] = "persist.ext.light.sunlight_on";
+static const char SUNLIGHT_APPLIED_PROP[] = "persist.ext.light.sunlight_applied";
 
 namespace aidl {
 namespace android {
@@ -78,22 +80,37 @@ ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) 
 void Lights::handleBacklight_brightness(const uint32_t brightness_s) {
     static uint32_t max_brightness, brightness;
     const static std::string false_s = std::to_string(false);
+    const static std::string true_s = std::to_string(1);
     static std::once_flag once;
     static bool need_conversion;
     using ::android::base::GetProperty;
-
-    if (brightness_s != 0) brightness = brightness_s;
+    using ::android::base::SetProperty;
 
     std::call_once(once, []{ 
          max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS);
          need_conversion = max_brightness != MAX_INPUT_BRIGHTNESS;
     });
 
-    if (GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == false_s) {
-        brightness *= SUNLIGHT_RATIO;
+    const bool sunlightOn = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
+    bool needApply = sunlightOn;
+    if (brightness_s != 0) {
+	brightness = brightness_s;
+	if (need_conversion) {
+	    brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
+	}
+    } else {
+	bool isApplied = GetProperty(SUNLIGHT_APPLIED_PROP, false_s) == true_s;
+	bool needRestore = !sunlightOn && isApplied;
+	if (needRestore) {
+	    brightness /= SUNLIGHT_RATIO;
+	    SetProperty(SUNLIGHT_APPLIED_PROP, false_s);
+	} else {
+	    needApply = !needRestore;
+	}
     }
-    if (need_conversion && brightness_s != 0) {
-        brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
+    if (needApply) {
+        brightness *= SUNLIGHT_RATIO;
+        SetProperty(SUNLIGHT_APPLIED_PROP, true_s);
     }
 
     set(PANEL_BRIGHTNESS_NODE, brightness);
