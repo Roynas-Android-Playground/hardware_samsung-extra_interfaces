@@ -2,6 +2,7 @@
 
 #include <GetServiceSupport.h>
 #include <TestLogSupport.h>
+#include <SafeStoi.h>
 
 using aidl::vendor::samsung_ext::framework::battery::ISmartCharge;
 
