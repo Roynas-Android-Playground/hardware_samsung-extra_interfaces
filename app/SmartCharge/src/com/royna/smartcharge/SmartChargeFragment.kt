@@ -90,7 +90,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
                  if (mStop <= mSharedPreferences.getInt(PREF_RESTART_CFG, 70)) { 
                       mMainHandler.post { mRestartBar.value = (mStop - MIN) / 2 + MIN }
                       mSharedPreferences.edit().putInt(PREF_RESTART_CFG, mRestartBar.value).apply()
-                      updateSeekbarTitles(mapOf(p.key to mRestartBar.value))
+                      updateSeekbarTitles(mapOf(mRestartBar.key to mRestartBar.value))
                  }
             }
             mSharedPreferences.edit().putBoolean(PREF_ENABLE_RESTART, new).apply()
