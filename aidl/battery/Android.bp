@@ -13,5 +13,5 @@ aidl_interface {
             imports: [],
         },
     ],
-
+    system_ext_specific: true,
 }
