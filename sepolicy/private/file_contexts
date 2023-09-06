@@ -1,2 +1,2 @@
-/system(/system_ext)?/bin/hw/vendor\.samsung_ext\.hardware\.camera\.flashlight-service					u:object_r:hal_samsung_camera_flashlight_default_exec:s0
-/system(/system_ext)?/bin/hw/vendor\.samsung_ext\.framework\.battery-service						u:object_r:hal_samsung_battery_default_exec:s0
+(/system)?/system_ext/bin/hw/vendor\.samsung_ext\.hardware\.camera\.flashlight-service					u:object_r:hal_samsung_camera_flashlight_default_exec:s0
+(/system)?/system_ext/bin/hw/vendor\.samsung_ext\.framework\.battery-service						u:object_r:hal_samsung_battery_default_exec:s0
