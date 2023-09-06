@@ -113,6 +113,7 @@ SmartCharge::SmartCharge(void) {
 }
 
 void SmartCharge::startLoop(bool withrestart) {
+  bool initdone = false;
   ALOGD("%s: ++", __func__);
   while (kRun.load()) {
     auto per = BatteryHelper::getPercent();
@@ -137,7 +138,7 @@ void SmartCharge::startLoop(bool withrestart) {
       tmp = ChargeStatus::ON;
     else
       tmp = ChargeStatus::NOOP;
-    if (tmp != status) {
+    if (tmp != status || !initdone) {
       switch (tmp) {
         case ChargeStatus::OFF:
           BatteryHelper::setChargable(false);
@@ -149,6 +150,7 @@ void SmartCharge::startLoop(bool withrestart) {
           break;
       }
       status = tmp;
+      initdone = true;
     }
     std::this_thread::sleep_for(std::chrono::seconds(5));
   }
