@@ -32,9 +32,9 @@ static constexpr const char *kSmartChargeEnabledProp =
     "persist.ext.smartcharge.enabled";
 static constexpr const char kComma = ',';
 static constexpr const char *kChargeCtlSysfs =
-    "/sys/devices/platform/battery/power_supply/battery/batt_slate_mode";
+    "/sys/class/power_supply/battery/batt_slate_mode";
 static constexpr const char *kBatteryPercentSysfs =
-    "/sys/devices/platform/battery/power_supply/battery/capacity";
+    "/sys/class/power_supply/battery/capacity";
 
 struct ConfigPair {
   int first;
