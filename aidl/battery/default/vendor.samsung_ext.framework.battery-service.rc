@@ -1,3 +1,6 @@
+on init
+    chown system system /sys/class/power_supply/battery/batt_slate_mode
+
 service battery-hal-aidl /system_ext/bin/hw/vendor.samsung_ext.framework.battery-service
     class hal
     user system
