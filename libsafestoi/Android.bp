@@ -3,6 +3,7 @@ cc_library_shared {
     srcs: ["SafeStoi.cpp"],
     export_include_dirs: ["."],
     cpp_std: "c++17",
+    system_ext_specific: true,
 }
 
 cc_defaults {
