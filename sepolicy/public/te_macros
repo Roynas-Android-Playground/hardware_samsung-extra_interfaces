@@ -1,0 +1,33 @@
+###############################
+# w_file_recursive(context, dircontext)
+# Allow context to write to a file under dircontext
+define(`w_file_recursive', `
+allow $1 $2:file w_file_perms;
+allow $1 $2:dir search;
+')
+
+###############################
+# r_file_recursive(context, dircontext)
+# Allow context to read a file under dircontext
+define(`r_file_recursive', `
+allow $1 $2:file r_file_perms;
+allow $1 $2:dir search;
+')
+
+###############################
+# rw_file_recursive(context, dircontext)
+# same as r_file_recursive + w_file_recursive
+define(`rw_file_recursive', `
+r_file_recursive($1, $2)
+w_file_recursive($1, $2)
+')
+
+###############################
+# binder_dualcall(srccontext, destcontext)
+# Allow srccontext -> destcontext, destcontext -> srccontext
+# binder_call's
+define(`binder_dualcall', `
+binder_call($1, $2)
+binder_call($2, $1)
+')
+
