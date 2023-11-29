@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <log/log.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
 #include <atomic>
 #include <fstream>
@@ -79,6 +80,19 @@ struct OutputContext {
 
   operator bool() const { return valid; }
 
+  /**
+   * To be called on ~OutputContext Sub-classes
+   */
+  void delOutputContext() {
+     struct stat buf {};
+     auto path = getOutFilePath();
+     int rc = stat(path.c_str(), &buf);
+     if (rc == 0 && buf.st_size == 0) {
+        ALOGD("Deleting %s because it is empty", path.c_str());
+        std::remove(path.c_str());
+     }
+  }
+
   virtual ~OutputContext() {}
 
  private:
@@ -95,7 +109,6 @@ struct LogFilterContext : OutputContext {
   virtual std::string getFilterName(void) const = 0;
   std::string getFileName(void) const override;
   void setParent(LoggerContext *_parent) { parent = _parent; }
-  ~LogFilterContext() override = default;
 
  private:
   LoggerContext *parent = nullptr;
@@ -171,7 +184,7 @@ struct LoggerContext : OutputContext {
       PLOGE("[Context %s] Open source", getFileName().c_str());
     }
   }
-  virtual ~LoggerContext(){};
+  virtual ~LoggerContext() {};
 
  private:
   std::vector<LogFilterContext *> filters;
@@ -188,7 +201,7 @@ struct DmesgContext : LoggerContext {
   FILE *openSource(void) override { return fopen("/proc/kmsg", "r"); }
   void closeSource(FILE *fp) override { fclose(fp); }
   std::string getFileName() const override { return "kmsg"; }
-  ~DmesgContext() override = default;
+  ~DmesgContext() override { delOutputContext(); }
 };
 
 // Logcat
@@ -196,7 +209,7 @@ struct LogcatContext : LoggerContext {
   FILE *openSource(void) override { return popen("/system/bin/logcat", "r"); }
   void closeSource(FILE *fp) override { pclose(fp); }
   std::string getFileName() const override { return "logcat"; }
-  ~LogcatContext() override = default;
+  ~LogcatContext() override { delOutputContext(); }
 };
 
 // Filters - AVC
@@ -205,7 +218,7 @@ struct AvcFilterContext : LogFilterContext {
     return std::regex_search(line, std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})"));
   }
   std::string getFilterName(void) const override { return "avc"; }
-  ~AvcFilterContext() override = default;
+  ~AvcFilterContext() override { delOutputContext(); }
 };
 
 int main(void) {
