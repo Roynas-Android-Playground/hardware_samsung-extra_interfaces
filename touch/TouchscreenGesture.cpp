@@ -47,8 +47,10 @@ bool TouchscreenGesture::isSupported() {
 Return<void> TouchscreenGesture::getSupportedGestures(getSupportedGestures_cb resultCb) {
     std::vector<Gesture> gestures;
 
-    for (const auto& entry : kGestureInfoMap) {
-        gestures.push_back({entry.first, entry.second.name, entry.second.keycode});
+    if (isSupported()) {
+        for (const auto& entry : kGestureInfoMap) {
+            gestures.push_back({entry.first, entry.second.name, entry.second.keycode});
+        }
     }
     resultCb(gestures);
 
@@ -57,11 +59,16 @@ Return<void> TouchscreenGesture::getSupportedGestures(getSupportedGestures_cb re
 
 Return<bool> TouchscreenGesture::setGestureEnabled(
     const ::vendor::lineage::touch::V1_0::Gesture&, bool enabled) {
-    std::ofstream file(kTspPath);
 
-    file << "singletap_enable," << (enabled ? "1" : "0");
+    if (isSupported()) {
+        std::ofstream file(kTspPath);
 
-    return !file.fail();
+        file << "singletap_enable," << (enabled ? "1" : "0");
+
+        return !file.fail();
+    } else {
+        return false;
+    }
 }
 
 // Methods from ::android::hidl::base::V1_0::IBase follow.
