@@ -42,19 +42,20 @@ int main() {
 
     configureRpcThreadpool(1, true /*callerWillJoin*/);
 
-    if (touchscreenGesture->isSupported()) {
-        status = touchscreenGesture->registerAsService();
-        if (status != OK) {
-            LOG(ERROR) << "Could not register service for Touch HAL TouchscreenGesture Iface ("
-                       << status << ")";
-            goto shutdown;
-        }
+    if (!touchscreenGesture->isSupported())
+	LOG(WARNING) << "isSupported() returns false, registering stub implementation!";
+    
+    status = touchscreenGesture->registerAsService();
+    if (status != OK) {
+        LOG(ERROR) << "Could not register service for Touch HAL TouchscreenGesture Iface ("
+                   << status << ")";
+        goto shutdown;
     }
 
     LOG(INFO) << "Touch HAL service is ready.";
     joinRpcThreadpool();
-// Should not pass this line
 
+    // Should not pass this line
 shutdown:
     // In normal operation, we don't expect the thread pool to shutdown
     LOG(ERROR) << "Touch HAL service is shutting down.";
