@@ -62,13 +62,12 @@ Return<bool> TouchscreenGesture::setGestureEnabled(
 
     if (isSupported()) {
         std::ofstream file(kTspPath);
-
-        file << "singletap_enable," << (enabled ? "1" : "0");
-
-        return !file.fail();
-    } else {
-        return false;
+        if (file.is_open()) {
+            file << "singletap_enable," << (enabled ? "1" : "0");
+            return true;
+        }
     }
+    return false;
 }
 
 // Methods from ::android::hidl::base::V1_0::IBase follow.
