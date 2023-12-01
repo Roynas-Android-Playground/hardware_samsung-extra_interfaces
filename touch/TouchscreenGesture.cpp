@@ -17,6 +17,8 @@
 #include <fstream>
 #include <mutex>
 
+#include <android-base/file.h>
+
 #include "TouchscreenGesture.h"
 
 namespace vendor {
@@ -37,8 +39,9 @@ bool TouchscreenGesture::isSupported() {
     static bool kSupported = false;
     static std::once_flag once;
     std::call_once(once, [] {
-        std::ofstream file(kTspPath);
-        kSupported = file.good();
+        std::string cmds;
+	android::base::ReadFileToString(TSP_CMD_LIST_NODE, &cmds);
+	kSupported = cmds.find("singletap_enable") != std::string::npos;
     });
     return kSupported;
 }
