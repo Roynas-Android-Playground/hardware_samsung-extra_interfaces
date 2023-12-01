@@ -14,13 +14,11 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "vendor.lineage.touch@1.0-service.singletap"
+// Here to avoid -Wmacro-redefined
+#include "TouchscreenGesture.h"
 
-#include <android-base/logging.h>
 #include <binder/ProcessState.h>
 #include <hidl/HidlTransportSupport.h>
-
-#include "TouchscreenGesture.h"
 
 using android::hardware::configureRpcThreadpool;
 using android::hardware::joinRpcThreadpool;

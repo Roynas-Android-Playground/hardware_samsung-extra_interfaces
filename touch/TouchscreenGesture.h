@@ -16,6 +16,9 @@
 
 #pragma once
 
+#define LOG_TAG "vendor.lineage.touch@1.0-service.singletap"
+#include <android-base/logging.h>
+
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 #include <vendor/lineage/touch/1.0/ITouchscreenGesture.h>
