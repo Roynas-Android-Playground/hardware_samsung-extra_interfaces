@@ -51,6 +51,8 @@ Return<void> TouchscreenGesture::getSupportedGestures(getSupportedGestures_cb re
         for (const auto& entry : kGestureInfoMap) {
             gestures.push_back({entry.first, entry.second.name, entry.second.keycode});
         }
+    } else {
+        LOG(ERROR) << __func__ << ": Unsupported";
     }
     resultCb(gestures);
 
@@ -66,6 +68,8 @@ Return<bool> TouchscreenGesture::setGestureEnabled(
             file << "singletap_enable," << (enabled ? "1" : "0");
             return true;
         }
+    } else {
+        LOG(ERROR) << __func__ << ": Unsupported";
     }
     return false;
 }
