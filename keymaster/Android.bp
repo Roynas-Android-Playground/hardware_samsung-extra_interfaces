@@ -16,6 +16,7 @@
 
 cc_prebuilt_library_shared {
     name: "libcrypto-samsung_ext",
+    stem: "libcrypto-v33",
     target: {
         android_arm64: {
             srcs: ["libcrypto-v33.so"],
