@@ -68,7 +68,7 @@ Return<bool> TouchscreenGesture::setGestureEnabled(
     if (isSupported()) {
         std::ofstream file(kTspPath);
         if (file.is_open()) {
-            file << "singletap_enable," << (enabled ? "1" : "0");
+            file << "singletap_enable," << enabled;
             return true;
         }
     } else {
