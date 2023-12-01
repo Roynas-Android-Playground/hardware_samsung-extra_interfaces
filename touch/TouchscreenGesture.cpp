@@ -15,6 +15,7 @@
  */
 
 #include <fstream>
+#include <mutex>
 
 #include "TouchscreenGesture.h"
 
@@ -33,8 +34,13 @@ const std::map<int32_t, TouchscreenGesture::GestureInfo> TouchscreenGesture::kGe
 };
 
 bool TouchscreenGesture::isSupported() {
-    std::ofstream file(kTspPath);
-    return file.good();
+    static bool kSupported = false;
+    static std::once_flag once;
+    std::call_once(once, [] {
+        std::ofstream file(kTspPath);
+        kSupported = file.good();
+    });
+    return kSupported;
 }
 
 // Methods from ::vendor::lineage::touch::V1_0::ITouchscreenGesture follow.
