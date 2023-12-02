@@ -1,2 +1,2 @@
 /(vendor|system/vendor)/bin/hw/vendor\.samsung_ext\.hardware\.light-service        u:object_r:hal_light_default_exec:s0
-/(vendor|system/vendor)/bin/hw/vendor\.lineage\.touch@[0-9]\.[0-9]-service\.ss     u:object_r:hal_lineage_touch_default_exec:s0
+/(vendor|system/vendor)/bin/hw/vendor\.lineage\.touch@[0-9]\.[0-9]-service\.singletap  u:object_r:hal_lineage_touch_default_exec:s0

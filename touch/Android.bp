@@ -14,8 +14,9 @@
 
 cc_binary {
     name: "vendor.lineage.touch@1.0-service.ss",
-    init_rc: ["vendor.lineage.touch@1.0-service.ss.rc"],
-    vintf_fragments: ["vendor.lineage.touch@1.0-service.ss.xml"],
+    stem: "vendor.lineage.touch@1.0-service.singletap",
+    init_rc: ["vendor.lineage.touch@1.0-service.singletap.rc"],
+    vintf_fragments: ["vendor.lineage.touch@1.0-service.singletap.xml"],
     defaults: ["hidl_defaults"],
     relative_install_path: "hw",
     // FIXME: this should be 'vendor: true' for modules that will eventually be
