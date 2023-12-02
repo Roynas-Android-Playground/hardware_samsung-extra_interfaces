@@ -110,18 +110,18 @@ SmartCharge::SmartCharge(void) {
 #undef func
 }
 
+enum ChargeStatus {
+  ON,
+  OFF,
+  NOOP,
+};
+
 void SmartCharge::startLoop(bool withrestart) {
   bool initdone = false;
+  ChargeStatus tmp, status = ChargeStatus::NOOP;
   ALOGD("%s: ++", __func__);
   while (kRun.load()) {
     auto per = BatteryHelper::getPercent();
-    enum ChargeStatus {
-      ON,
-      OFF,
-      NOOP,
-    };
-    static ChargeStatus status = ChargeStatus::NOOP;
-    ChargeStatus tmp;
     if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, ConfigPair{0, 0}.fromPair());
