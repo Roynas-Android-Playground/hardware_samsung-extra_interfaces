@@ -18,8 +18,8 @@ constexpr const int COLOR_MASK = 0x00ffffff;
 constexpr const int MAX_INPUT_BRIGHTNESS = 255;
 constexpr const float SUNLIGHT_RATIO = 0.8f;
 
-static const char SUNLIGHT_ENABLED_PROP[] = "persist.ext.light.sunlight_on";
-static const char SUNLIGHT_APPLIED_PROP[] = "persist.ext.light.sunlight_applied";
+static const char SUNLIGHT_ENABLED_PROP[] = "persist.vendor.ext.sunlight.on";
+static const char SUNLIGHT_APPLIED_PROP[] = "persist.vendor.ext.sunlight.applied";
 
 namespace aidl {
 namespace android {
