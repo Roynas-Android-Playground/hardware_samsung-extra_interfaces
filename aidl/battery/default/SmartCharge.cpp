@@ -11,7 +11,9 @@
 #include <android-base/properties.h>
 #include <log/log.h>
 
+#include <chrono>
 #include <sstream>
+#include <type_traits>
 
 namespace aidl {
 namespace vendor {
@@ -20,42 +22,78 @@ namespace framework {
 namespace battery {
 
 using ::android::base::GetProperty;
+using ::android::base::ReadFileToString;
 using ::android::base::SetProperty;
 using ::android::base::WaitForPropertyCreation;
-
-using ::android::base::ReadFileToString;
 using ::android::base::WriteStringToFile;
 
-static constexpr const char *kSmartChargeConfigProp =
-    "persist.ext.smartcharge.config";
-static constexpr const char *kSmartChargeEnabledProp =
-    "persist.ext.smartcharge.enabled";
-static constexpr const char kComma = ',';
-static constexpr const char *kChargeCtlSysfs =
+using namespace std::chrono_literals;
+
+static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
+static const char kSmartChargeEnabledProp[] = "persist.ext.smartcharge.enabled";
+static const char kComma = ',';
+static const char kChargeCtlSysfs[] =
     "/sys/class/power_supply/battery/batt_slate_mode";
-static constexpr const char *kBatteryPercentSysfs =
+static const char kBatteryPercentSysfs[] =
     "/sys/class/power_supply/battery/capacity";
 
+template <typename T>
+using is_integral_or_bool =
+    std::enable_if_t<std::is_integral_v<T> || std::is_same_v<T, bool>, bool>;
+
+static inline bool isValidBool(const int val) {
+  return val == true || val == false;
+}
+static inline bool verifyConfig(const int lower, const int upper) {
+  return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
+}
+
+template <typename T, is_integral_or_bool<T> = true>
 struct ConfigPair {
-  int first;
-  int second;
-  std::string fromPair(void) {
+  T first, second;
+  std::string toString(void) {
     return std::to_string(first) + kComma + std::to_string(second);
   }
-  static bool fromString(const std::string &v, ConfigPair *pair) {
-    std::stringstream ss(v);
-    std::string res;
-
-    if (v.find(kComma) != std::string::npos) {
-      getline(ss, res, kComma);
-      pair->first = stoi_safe(res);
-      getline(ss, res, kComma);
-      pair->second = stoi_safe(res);
-      return true;
-    }
-    return false;
-  }
 };
+
+template <typename U>
+bool fromString(const std::string &v, ConfigPair<U> *pair) {
+  std::stringstream ss(v);
+  std::string res;
+
+  if (v.find(kComma) != std::string::npos) {
+    getline(ss, res, kComma);
+    pair->first = stoi_safe(res);
+    getline(ss, res, kComma);
+    pair->second = stoi_safe(res);
+    return true;
+  }
+  return false;
+}
+
+template <>
+bool fromString(const std::string& v, ConfigPair<bool> *pair) {
+  ConfigPair<int> tmp {};
+  if (fromString<int>(v, &tmp) && isValidBool(tmp.first) && isValidBool(tmp.second)) {
+    pair->first = tmp.first;
+    pair->second = tmp.second;
+    return true;
+  }
+  return false;
+}
+
+template <typename U>
+bool getAndParse(const char *prop, ConfigPair<U> *pair) {
+  if (WaitForPropertyCreation(prop, 500ms)) {
+    std::string propval = GetProperty(prop, "");
+    if (!propval.empty()) {
+      return fromString(propval, pair);
+    }
+  }
+  return false;
+}
+
+const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
 
 class BatteryHelper {
   static int _readSysfs(const char *sysfs) {
@@ -64,48 +102,46 @@ class BatteryHelper {
     return stoi_safe(data);
   }
 
- public:
+public:
   static void setChargable(bool enable) {
     WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
   }
   static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
 };
 
-static bool getAndParse(const char *prop, ConfigPair *pair) {
-  if (WaitForPropertyCreation(prop, std::chrono::milliseconds(500))) {
-    std::string propval = GetProperty(prop, "");
-    if (!propval.empty()) {
-      return ConfigPair::fromString(propval, pair);
-    }
-  }
-  return false;
-}
-
-static inline bool verifyConfig(const int lower, const int upper) {
-  return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
-}
-
 SmartCharge::SmartCharge(void) {
   kPoolPtr = std::make_shared<ThreadPool>(3);
 #define func "SmartCharge()"
   kPoolPtr->Enqueue([this] {
-    ConfigPair ret {};
-    if (getAndParse(kSmartChargeConfigProp, &ret) && verifyConfig(ret.first, ret.second)) {
-      upper = ret.second;
-      lower = ret.first;
-      ALOGD("%s: upper: %d, lower: %d", func, upper, lower);
-    } else {
-      upper = -1;
-      lower = -1;
-      ALOGW("%s: Parsing config failed", func);
-      return;
+    {
+      ConfigPair<int> ret{};
+      if (getAndParse(kSmartChargeConfigProp, &ret) &&
+          verifyConfig(ret.first, ret.second)) {
+        upper = ret.second;
+        lower = ret.first;
+        ALOGD("%s: upper: %d, lower: %d", func, upper, lower);
+      } else {
+        upper = -1;
+        lower = -1;
+        ALOGW("%s: Parsing config failed", func);
+        return;
+      }
     }
-    if (getAndParse(kSmartChargeEnabledProp, &ret) && !!ret.first) {
-      ALOGD("%s: Starting loop, withrestart: %d", func, !!ret.second);
-      kRun.store(true);
-      startLoop(!!ret.second);
-    } else
-      ALOGD("%s: Not starting loop", func);
+    {
+      ConfigPair<bool> ret{};
+      if (getAndParse(kSmartChargeEnabledProp, &ret)) {
+        if (ret.first) {
+          ALOGD("%s: Starting loop, withrestart: %d", func, ret.second);
+          kRun.store(true);
+          startLoop(ret.second);
+        } else
+          ALOGD("%s: Not starting loop", func);
+      } else {
+        ALOGE("%s: Enabled prop value invaild, resetting to valid one...",
+              func);
+        SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
+      }
+    }
   });
 #undef func
 }
@@ -124,7 +160,7 @@ void SmartCharge::startLoop(bool withrestart) {
     auto per = BatteryHelper::getPercent();
     if (per < 0) {
       kRun.store(false);
-      SetProperty(kSmartChargeEnabledProp, ConfigPair{0, 0}.fromPair());
+      SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
       ALOGE("%s: exit loop: percent: %d", __func__, per);
       break;
     }
@@ -138,19 +174,19 @@ void SmartCharge::startLoop(bool withrestart) {
       tmp = ChargeStatus::NOOP;
     if (tmp != status || !initdone) {
       switch (tmp) {
-        case ChargeStatus::OFF:
-          BatteryHelper::setChargable(false);
-          break;
-        case ChargeStatus::ON:
-          BatteryHelper::setChargable(true);
-          break;
-        default:
-          break;
+      case ChargeStatus::OFF:
+        BatteryHelper::setChargable(false);
+        break;
+      case ChargeStatus::ON:
+        BatteryHelper::setChargable(true);
+        break;
+      default:
+        break;
       }
       status = tmp;
       initdone = true;
     }
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(5s);
   }
   ALOGD("%s: --", __func__);
 }
@@ -162,10 +198,10 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRun.load())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  auto pair = ConfigPair{lower_ < 0 ? -1 : lower_, upper_};
+  auto pair = ConfigPair<int>{lower_ < 0 ? -1 : lower_, upper_};
   {
     std::unique_lock<std::mutex> _(config_lock);
-    SetProperty(kSmartChargeConfigProp, pair.fromPair());
+    SetProperty(kSmartChargeConfigProp, pair.toString());
     lower = lower_ < 0 ? -1 : lower_;
     upper = upper_;
   }
@@ -182,10 +218,10 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRun.load() == enable)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  auto pair = ConfigPair{static_cast<int>(enable), static_cast<int>(restart)};
+  auto pair = ConfigPair<bool>{enable, restart};
   {
     std::unique_lock<std::mutex> _(config_lock);
-    SetProperty(kSmartChargeEnabledProp, pair.fromPair());
+    SetProperty(kSmartChargeEnabledProp, pair.toString());
   }
   if (enable) {
     kRun.store(true);
@@ -199,8 +235,8 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   return ndk::ScopedAStatus::ok();
 }
 
-}  // namespace battery
-}  // namespace framework
-}  // namespace samsung_ext
-}  // namespace vendor
-}  // namespace aidl
+} // namespace battery
+} // namespace framework
+} // namespace samsung_ext
+} // namespace vendor
+} // namespace aidl
