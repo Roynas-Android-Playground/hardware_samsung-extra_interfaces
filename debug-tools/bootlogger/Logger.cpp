@@ -65,9 +65,10 @@ struct OutputContext {
     ALOGI("%s: Open %s", __func__, out.c_str());
     std::remove(out.c_str());
     ofs = std::ofstream(out);
-    valid = ofs.good();
-    if (!valid) PLOGE("%s: Failed to open %s", __func__, out.c_str());
-    return valid;
+    bool ok = ofs.good();
+    if (!ok) 
+       PLOGE("%s: Failed to open %s", __func__, out.c_str());
+    return ok;
   }
 
   /**
@@ -79,7 +80,7 @@ struct OutputContext {
     ofs << data << std::endl;
   }
 
-  operator bool() const { return valid; }
+  operator bool() const { return ofs.good(); }
 
   /**
    * To be called on ~OutputContext Sub-classes
@@ -98,7 +99,6 @@ struct OutputContext {
 
  private:
   std::ofstream ofs;
-  bool valid = false;
 };
 
 /**
