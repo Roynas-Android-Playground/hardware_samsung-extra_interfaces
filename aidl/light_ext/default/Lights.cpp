@@ -43,7 +43,7 @@ static T get(const std::string& path, const T& def) {
     return file.fail() ? def : result;
 }
 
-using ::android::base::GetProperty;
+using ::android::base::GetBoolProperty;
 using ::android::base::SetProperty;
 
 Lights::Lights() {
@@ -80,8 +80,6 @@ ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) 
 }
 
 void Lights::handleBacklight_brightness(const bool fromExtHal, const uint32_t brightness_s) {
-    const static std::string false_s = std::to_string(false);
-    const static std::string true_s = std::to_string(true);
     static int32_t max_brightness;
     static std::once_flag once;
     static bool need_conversion;
@@ -90,7 +88,7 @@ void Lights::handleBacklight_brightness(const bool fromExtHal, const uint32_t br
     std::call_once(once, [this]{ 
          max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS);
          need_conversion = max_brightness != MAX_INPUT_BRIGHTNESS;
-         sunlight_data.enabled = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
+         sunlight_data.enabled = GetBoolProperty(SUNLIGHT_ENABLED_PROP, false);
     });
 
     if (!fromExtHal) {
@@ -102,7 +100,7 @@ void Lights::handleBacklight_brightness(const bool fromExtHal, const uint32_t br
         sunlight_data.requested_brightness = brightness;
     } else {
         // New enabled data from onPropsChanged()
-        sunlight_data.enabled = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
+        sunlight_data.enabled = GetBoolProperty(SUNLIGHT_ENABLED_PROP, false);
         // If the call was from ExtHAL, brightness is from cache
         brightness = sunlight_data.requested_brightness;
         if (brightness == -1) {
