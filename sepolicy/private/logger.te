@@ -16,3 +16,4 @@ allow logger logdr_socket:sock_file write;
 allow logger logd:unix_stream_socket connectto;
 
 get_prop(logger, boot_status_prop)
+get_prop(logger, logd_prop)

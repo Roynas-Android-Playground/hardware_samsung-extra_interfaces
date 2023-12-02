@@ -33,6 +33,7 @@
 #include <thread>
 #include <vector>
 
+using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
 
 #define PLOGE(fmt, ...) ALOGE(fmt ": %s", ##__VA_ARGS__, strerror(errno))
@@ -234,15 +235,21 @@ int main(void) {
   std::atomic_bool run;
 
   DmesgContext kDmesgCtx;
+  AvcFilterContext kDmesgAvcFilter;
   LogcatContext kLogcatCtx;
-  AvcFilterContext kDmesgAvcFilter, kLogcatAvcFilter;
-
-  kDmesgCtx.registerLogFilter(&kDmesgAvcFilter);
-  kLogcatCtx.registerLogFilter(&kLogcatAvcFilter);
+  AvcFilterContext kLogcatAvcFilter;
 
   run = true;
-  threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
+
+  // If this prop is true, logd logs kernel message to logcat
+  // Don't make duplicate (Also it will race against kernel logs)
+  if (!GetBoolProperty("ro.logd.kernel", false)) {
+      kDmesgCtx.registerLogFilter(&kDmesgAvcFilter);
+      threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
+  }
+  kLogcatCtx.registerLogFilter(&kLogcatAvcFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
+
   WaitForProperty("sys.boot_completed", "1");
   run = false;
   for (auto &i : threads) i.join();
