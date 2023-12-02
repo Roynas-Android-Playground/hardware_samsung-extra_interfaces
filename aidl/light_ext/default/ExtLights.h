@@ -19,6 +19,7 @@ namespace light {
 
 struct ExtLights : public BnExtLights {
     ndk::ScopedAStatus onPropsChanged() override;
+    std::shared_ptr<Lights> svc;
 };
 
 } // namespace light

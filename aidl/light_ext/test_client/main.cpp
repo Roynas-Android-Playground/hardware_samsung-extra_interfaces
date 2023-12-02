@@ -21,7 +21,7 @@ int main(void) {
   std::string propval;
   android::status_t status;
   std::shared_ptr<IExtLights> extsvc;
-  static const char SUNLIGHT_ENABLED_PROP[] = "persist.ext.light.sunlight_on";
+  static const char SUNLIGHT_ENABLED_PROP[] = "persist.vendor.ext.sunlight.on";
   ndk::SpAIBinder BExtLights;
   bool enable_todo = false;
 

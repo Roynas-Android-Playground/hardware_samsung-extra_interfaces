@@ -19,7 +19,6 @@ constexpr const int MAX_INPUT_BRIGHTNESS = 255;
 constexpr const float SUNLIGHT_RATIO = 0.8f;
 
 static const char SUNLIGHT_ENABLED_PROP[] = "persist.vendor.ext.sunlight.on";
-static const char SUNLIGHT_APPLIED_PROP[] = "persist.vendor.ext.sunlight.applied";
 
 namespace aidl {
 namespace android {
@@ -43,6 +42,9 @@ static T get(const std::string& path, const T& def) {
     file >> result;
     return file.fail() ? def : result;
 }
+
+using ::android::base::GetProperty;
+using ::android::base::SetProperty;
 
 Lights::Lights() {
     mLights.emplace(LightType::BACKLIGHT,
@@ -77,47 +79,52 @@ ndk::ScopedAStatus Lights::setLightState(int32_t id, const HwLightState& state) 
     return ndk::ScopedAStatus::ok();
 }
 
-void Lights::handleBacklight_brightness(const uint32_t brightness_s) {
-    static uint32_t max_brightness, brightness;
+void Lights::handleBacklight_brightness(const bool fromExtHal, const uint32_t brightness_s) {
     const static std::string false_s = std::to_string(false);
-    const static std::string true_s = std::to_string(1);
+    const static std::string true_s = std::to_string(true);
+    static int32_t max_brightness;
     static std::once_flag once;
     static bool need_conversion;
-    using ::android::base::GetProperty;
-    using ::android::base::SetProperty;
+    int32_t brightness;
 
-    std::call_once(once, []{ 
+    std::call_once(once, [this]{ 
          max_brightness = get(PANEL_MAX_BRIGHTNESS_NODE, MAX_INPUT_BRIGHTNESS);
          need_conversion = max_brightness != MAX_INPUT_BRIGHTNESS;
+         sunlight_data.enabled = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
     });
 
-    const bool sunlightOn = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
-    bool needApply = sunlightOn;
-    if (brightness_s != 0) {
-	brightness = brightness_s;
-	if (need_conversion) {
-	    brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
-	}
+    if (!fromExtHal) {
+        // If it wasn't called from ExtHAL...
+        brightness = brightness_s;
+        if (need_conversion) {
+             brightness = brightness * max_brightness / MAX_INPUT_BRIGHTNESS;
+        }
+        sunlight_data.requested_brightness = brightness;
     } else {
-	bool isApplied = GetProperty(SUNLIGHT_APPLIED_PROP, false_s) == true_s;
-	bool needRestore = !sunlightOn && isApplied;
-	if (needRestore) {
-	    brightness /= SUNLIGHT_RATIO;
-	    SetProperty(SUNLIGHT_APPLIED_PROP, false_s);
-	} else {
-	    needApply = !needRestore;
-	}
+        // New enabled data from onPropsChanged()
+        sunlight_data.enabled = GetProperty(SUNLIGHT_ENABLED_PROP, false_s) == true_s;
+        // If the call was from ExtHAL, brightness is from cache
+        brightness = sunlight_data.requested_brightness;
+        if (brightness == -1) {
+            // If brightness is -1 (Meaning not initialized), then better not set backlight to negative
+            // cuz that... Just read it from sysfs
+            brightness = get(PANEL_BRIGHTNESS_NODE, -1);
+            if (brightness == -1) {
+                // OK Kys
+                return;
+            }
+        }
     }
-    if (needApply) {
+    if (sunlight_data.enabled) {
+        // If enabled, apply ratio.
         brightness *= SUNLIGHT_RATIO;
-        SetProperty(SUNLIGHT_APPLIED_PROP, true_s);
     }
 
     set(PANEL_BRIGHTNESS_NODE, brightness);
 }
 
 void Lights::handleBacklight(const HwLightState& state) {
-    handleBacklight_brightness(rgbToBrightness(state));
+    handleBacklight_brightness(false, rgbToBrightness(state));
 }
 
 #ifdef BUTTON_BRIGHTNESS_NODE

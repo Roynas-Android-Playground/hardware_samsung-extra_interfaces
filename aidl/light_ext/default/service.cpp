@@ -20,6 +20,7 @@ int main() {
     ABinderProcess_setThreadPoolMaxThreadCount(0);
     std::shared_ptr<Lights> lights = ndk::SharedRefBase::make<Lights>();
     std::shared_ptr<ExtLights> extlights = ndk::SharedRefBase::make<ExtLights>();
+    extlights->svc = lights;
 
     ndk::SpAIBinder binder = lights->asBinder();
     const std::string instance = std::string() + Lights::descriptor + "/default";
