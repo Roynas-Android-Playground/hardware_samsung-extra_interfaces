@@ -42,19 +42,18 @@ struct ConfigPair {
   std::string fromPair(void) {
     return std::to_string(first) + kComma + std::to_string(second);
   }
-  static std::optional<ConfigPair> fromString(const std::string &v) {
-    std::optional<int> first, second;
+  static bool fromString(const std::string &v, ConfigPair *pair) {
     std::stringstream ss(v);
     std::string res;
 
     if (v.find(kComma) != std::string::npos) {
       getline(ss, res, kComma);
-      first = stoi_safe(res);
+      pair->first = stoi_safe(res);
       getline(ss, res, kComma);
-      second = stoi_safe(res);
-      if (first && second) return ConfigPair{*first, *second};
+      pair->second = stoi_safe(res);
+      return true;
     }
-    return std::nullopt;
+    return false;
   }
 };
 
@@ -62,7 +61,7 @@ class BatteryHelper {
   static int _readSysfs(const char *sysfs) {
     std::string data;
     ReadFileToString(sysfs, &data);
-    return stoi_safe(data).value_or(-1);
+    return stoi_safe(data);
   }
 
  public:
@@ -72,14 +71,14 @@ class BatteryHelper {
   static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
 };
 
-static std::optional<ConfigPair> getAndParseIfPossible(const char *prop) {
+static bool getAndParse(const char *prop, ConfigPair *pair) {
   if (WaitForPropertyCreation(prop, std::chrono::milliseconds(500))) {
     std::string propval = GetProperty(prop, "");
     if (!propval.empty()) {
-      return ConfigPair::fromString(propval);
+      return ConfigPair::fromString(propval, pair);
     }
   }
-  return std::nullopt;
+  return false;
 }
 
 static inline bool verifyConfig(const int lower, const int upper) {
@@ -88,12 +87,12 @@ static inline bool verifyConfig(const int lower, const int upper) {
 
 SmartCharge::SmartCharge(void) {
   kPoolPtr = std::make_shared<ThreadPool>(3);
-#define func "<constructor>"
+#define func "SmartCharge()"
   kPoolPtr->Enqueue([this] {
-    auto ret = getAndParseIfPossible(kSmartChargeConfigProp);
-    if (ret.has_value() && verifyConfig(ret->first, ret->second)) {
-      upper = ret->second;
-      lower = ret->first;
+    ConfigPair ret {};
+    if (getAndParse(kSmartChargeConfigProp, &ret) && verifyConfig(ret.first, ret.second)) {
+      upper = ret.second;
+      lower = ret.first;
       ALOGD("%s: upper: %d, lower: %d", func, upper, lower);
     } else {
       upper = -1;
@@ -101,11 +100,10 @@ SmartCharge::SmartCharge(void) {
       ALOGW("%s: Parsing config failed", func);
       return;
     }
-    ret = getAndParseIfPossible(kSmartChargeEnabledProp);
-    if (ret.has_value() && !!ret->first) {
-      ALOGD("%s: Starting loop, withrestart: %d", func, !!ret->second);
+    if (getAndParse(kSmartChargeEnabledProp, &ret) && !!ret.first) {
+      ALOGD("%s: Starting loop, withrestart: %d", func, !!ret.second);
       kRun.store(true);
-      startLoop(!!ret->second);
+      startLoop(!!ret.second);
     } else
       ALOGD("%s: Not starting loop", func);
   });
@@ -127,7 +125,7 @@ void SmartCharge::startLoop(bool withrestart) {
     if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, ConfigPair{0, 0}.fromPair());
-      ALOGE("%s: exit loop: per %d", __func__, per);
+      ALOGE("%s: exit loop: percent: %d", __func__, per);
       break;
     }
     if (per > upper)

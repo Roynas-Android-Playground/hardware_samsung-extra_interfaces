@@ -1,4 +1,3 @@
-#include <optional>
 #include <string>
 
-std::optional<int> stoi_safe(const std::string& str);
+int stoi_safe(const std::string& str, const int fallback = -1);

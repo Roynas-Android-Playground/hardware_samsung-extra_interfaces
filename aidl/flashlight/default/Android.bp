@@ -3,7 +3,6 @@ cc_binary {
     relative_install_path: "hw",
     init_rc: ["vendor.samsung_ext.hardware.camera.flashlight-service.rc"],
     vintf_fragments: ["vendor.samsung_ext.hardware.camera.flashlight-service.xml"],
-    defaults: ["safestoi_defaults"],
     srcs: [
         "Flashlight.cpp",
         "service.cpp",
@@ -11,6 +10,7 @@ cc_binary {
     shared_libs: [
         "libbase",
         "libbinder_ndk",
+        "libsafestoi",
         "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
     ],
     system_ext_specific: true,

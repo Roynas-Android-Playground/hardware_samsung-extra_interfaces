@@ -1,13 +1,12 @@
 #include "SafeStoi.h"
 
-#include <iostream>
 #include <sstream>
 
-std::optional<int> stoi_safe(const std::string& str) {
+int stoi_safe(const std::string& str, const int fallback) {
   std::istringstream iss(str);
   int value;
   if (!(iss >> value)) {
-    return std::nullopt;
+    return fallback;
   }
-  return std::optional(value);
+  return value;
 }

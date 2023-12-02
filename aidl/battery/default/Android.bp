@@ -9,7 +9,6 @@ cc_binary {
     relative_install_path: "hw",
     init_rc: ["vendor.samsung_ext.framework.battery-service.rc"],
     vintf_fragments: ["vendor.samsung_ext.framework.battery-service.xml"],
-    defaults: ["safestoi_defaults"],
     srcs: [
         "SmartCharge.cpp",
         "service.cpp",
@@ -18,9 +17,9 @@ cc_binary {
         "libbase",
         "libbinder_ndk",
         "liblog",
+        "libsafestoi",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
     header_libs: ["libext_threadpool"],
-    cpp_std: "c++17",
     system_ext_specific: true,
 }

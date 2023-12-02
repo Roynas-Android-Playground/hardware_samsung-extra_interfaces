@@ -1,9 +1,9 @@
 cc_binary {
     name: "test_smartcharge",
-    defaults: ["safestoi_defaults"],
     shared_libs: [
         "libbase",
         "libbinder_ndk",
+        "libsafestoi",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
     header_libs: [
