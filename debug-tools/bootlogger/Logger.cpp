@@ -215,11 +215,14 @@ struct LogcatContext : LoggerContext {
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
   bool filter(const std::string &line) const override {
+    const static auto kAvcMessageRegEX = std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
+    const static auto kPropertyAccessRegEX = std::regex(R"(libc\s+:\s+Access\sdenied\sfinding)");
     bool kMatch = false;
+
     // Matches "avc: denied { ioctl } for comm=..." for example
-    kMatch |= std::regex_search(line, std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})"));
+    kMatch |= std::regex_search(line, kAvcMessageRegEX);
     // Matches "libc : Access denied finding property ..."
-    kMatch |= std::regex_search(line, std::regex(R"(libc\s+:\s+Access\sdenied\sfinding)"));
+    kMatch |= std::regex_search(line, kPropertyAccessRegEX);
     return kMatch;
   }
   std::string getFilterName(void) const override { return "avc"; }
