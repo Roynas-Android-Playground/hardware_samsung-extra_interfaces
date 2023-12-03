@@ -16,19 +16,20 @@
 
 #define LOG_TAG "bootlogger"
 
-#include <log/log.h>
 #include <android-base/properties.h>
-
 #include <errno.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <log/log.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -51,10 +52,17 @@ struct OutputContext {
   std::string kFileName;
 
   // Takes one argument 'filename' without file extension
-  OutputContext(const std::string& filename) : kFileName(filename) {
+  OutputContext(const std::string &filename) : kFileName(filename) {
     static std::string kLogDir = "/data/debug/";
     kFilePath = kLogDir + kFileName + ".txt";
   }
+
+  // Takes two arguments 'filename' and is_filter
+  OutputContext(const std::string &filename, const bool isFilter)
+      : OutputContext(filename) {
+    is_filter = isFilter;
+  }
+
   // No default constructor
   OutputContext() = delete;
 
@@ -62,12 +70,12 @@ struct OutputContext {
    * Open outfilestream.
    */
   bool openOutput(void) {
-    ALOGI("%s: Open %s", __func__, kFilePath.c_str());
+    ALOGI("%s: Opening '%s'%s", __func__, kFilePath.c_str(),
+          is_filter ? " (filter)" : "");
     std::remove(kFilePath.c_str());
     ofs = std::ofstream(kFilePath);
     bool ok = ofs.good();
-    if (!ok) 
-       PLOGE("%s: Failed to open %s", __func__, kFilePath.c_str());
+    if (!ok) PLOGE("%s: Failed to open '%s'", __func__, kFilePath.c_str());
     return ok;
   }
 
@@ -76,29 +84,28 @@ struct OutputContext {
    *
    * @param string data
    */
-  void writeToOutput(const std::string &data) {
-    ofs << data << std::endl;
-  }
+  void writeToOutput(const std::string &data) { ofs << data << std::endl; }
 
   operator bool() const { return ofs.good(); }
 
   /**
    * To be called on ~OutputContext Sub-classes
    */
-  void delOutputContext() {
-     struct stat buf {};
-     auto& path = kFilePath;
-     int rc = stat(path.c_str(), &buf);
-     if (rc == 0 && buf.st_size == 0) {
-        ALOGD("Deleting %s because it is empty", path.c_str());
-        std::remove(path.c_str());
-     }
+  void cleanupOutputCtx() {
+    struct stat buf {};
+    auto &path = kFilePath;
+    int rc = stat(path.c_str(), &buf);
+    if (rc == 0 && buf.st_size == 0) {
+      ALOGD("Deleting '%s' because it is empty", path.c_str());
+      std::remove(path.c_str());
+    }
   }
 
   virtual ~OutputContext() {}
 
  private:
   std::ofstream ofs;
+  bool is_filter;
 };
 
 /**
@@ -106,14 +113,16 @@ struct OutputContext {
  */
 struct LogFilterContext {
   // Function to be invoked to filter
-  // Note: Modifiable
+  // Note: The line passed to this function is modifiable.
   virtual bool filter(std::string &line) const = 0;
   // Filter name, must be a vaild file name itself.
   std::string kFilterName;
   // Constructor accepting filtername
-  LogFilterContext(const std::string& name) : kFilterName(name) {}
+  LogFilterContext(const std::string &name) : kFilterName(name) {}
   // No default one
   LogFilterContext() = delete;
+  // Virtual dtor
+  virtual ~LogFilterContext() {}
 };
 
 struct LoggerContext : OutputContext {
@@ -137,7 +146,11 @@ struct LoggerContext : OutputContext {
    * @param ctx The context to register
    */
   void registerLogFilter(std::shared_ptr<LogFilterContext> ctx) {
-    filters.emplace(ctx, (ctx->kFilterName + '.' + name));
+    ALOGD("%s: registered filter '%s' to '%s' logger", __func__,
+          ctx->kFilterName.c_str(), name.c_str());
+    filters.emplace(
+        ctx, std::make_unique<OutputContext>(ctx->kFilterName + '.' + name,
+                                             /*isFilter*/ true));
   }
 
   /**
@@ -151,7 +164,7 @@ struct LoggerContext : OutputContext {
     if (fp) {
       if (openOutput()) {
         for (auto &f : filters) {
-          f.second.openOutput();
+          f.second->openOutput();
         }
         while (*run) {
           auto ret = fgets(buf, sizeof(buf), fp);
@@ -161,31 +174,34 @@ struct LoggerContext : OutputContext {
             while (std::getline(ss, line)) {
               for (auto &f : filters) {
                 std::string fline = line;
-                if (f.first->filter(fline))
-                  f.second.writeToOutput(fline);
+                if (f.first->filter(fline)) f.second->writeToOutput(fline);
               }
               writeToOutput(line);
             }
           }
         }
         for (auto &f : filters) {
-          f.second.delOutputContext();
+          f.second->cleanupOutputCtx();
         }
         // ofstream will auto close
       } else {
-        PLOGE("[Context %s] Open output '%s'", kFileName.c_str(), kFilePath.c_str());
+        PLOGE("[Context %s] Opening output '%s'", name.c_str(),
+              kFilePath.c_str());
       }
       closeSource(fp);
     } else {
-      PLOGE("[Context %s] Open source", kFileName.c_str());
+      PLOGE("[Context %s] Opening source", name.c_str());
     }
   }
-  LoggerContext(const std::string &fname) : OutputContext(fname), name(fname) {}
-  virtual ~LoggerContext() {};
+  LoggerContext(const std::string &fname) : OutputContext(fname), name(fname) {
+    ALOGD("%s: Logger context '%s' created", __func__, fname.c_str());
+  }
+  virtual ~LoggerContext(){};
 
  private:
   std::string name;
-  std::map<std::shared_ptr<LogFilterContext>, OutputContext> filters;
+  std::map<std::shared_ptr<LogFilterContext>, std::unique_ptr<OutputContext>>
+      filters;
 };
 
 // DMESG
@@ -193,7 +209,7 @@ struct DmesgContext : LoggerContext {
   FILE *openSource(void) override { return fopen("/proc/kmsg", "r"); }
   void closeSource(FILE *fp) override { fclose(fp); }
   DmesgContext() : LoggerContext("kmsg") {}
-  ~DmesgContext() override { delOutputContext(); }
+  ~DmesgContext() override { cleanupOutputCtx(); }
 };
 
 // Logcat
@@ -201,23 +217,41 @@ struct LogcatContext : LoggerContext {
   FILE *openSource(void) override { return popen("/system/bin/logcat", "r"); }
   void closeSource(FILE *fp) override { pclose(fp); }
   LogcatContext() : LoggerContext("logcat") {}
-  ~LogcatContext() override { delOutputContext(); }
+  ~LogcatContext() override { cleanupOutputCtx(); }
 };
 
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
   bool filter(std::string &line) const override {
-    const static auto kAvcMessageRegEX = std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
-    const static auto kPropertyAccessRegEX = std::regex(R"(libc\s+:\s+Access\sdenied\sfinding)");
+    const static auto kAvcMessageRegEX =
+        std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
+    // libc : Access denied finding property "
+    const static auto kPropertyAccessRegEX =
+        std::regex(R"(libc\s+:\s+\w+\s\w+\s\w+\s\w+\s\")");
+    static std::vector<std::string> propsDenied;
+    std::smatch kPropMatch;
     bool kMatch = false;
+    const static auto flags = std::regex_constants::format_sed;
 
     // Matches "avc: denied { ioctl } for comm=..." for example
-    kMatch |= std::regex_search(line, kAvcMessageRegEX);
+    kMatch |= std::regex_search(line, kAvcMessageRegEX, flags);
     // Matches "libc : Access denied finding property ..."
-    kMatch |= std::regex_search(line, kPropertyAccessRegEX);
+    if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX, flags)) {
+      // Trim property name
+      // line: property "{prop name}"
+      line = line.substr(kPropMatch.length());
+      // line: {prop name}"
+      line = line.substr(0, line.find_first_of('"'));
+      if (std::find(propsDenied.begin(), propsDenied.end(), line) ==
+          propsDenied.end()) {
+        propsDenied.emplace_back(line);
+        kMatch = true;
+      }
+    }
     return kMatch;
   }
   AvcFilterContext() : LogFilterContext("avc") {}
+  ~AvcFilterContext() override = default;
 };
 
 int main(void) {
@@ -233,8 +267,8 @@ int main(void) {
   // If this prop is true, logd logs kernel message to logcat
   // Don't make duplicate (Also it will race against kernel logs)
   if (!GetBoolProperty("ro.logd.kernel", false)) {
-      kDmesgCtx.registerLogFilter(kAvcFilter);
-      threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
+    kDmesgCtx.registerLogFilter(kAvcFilter);
+    threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
   }
   kLogcatCtx.registerLogFilter(kAvcFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
