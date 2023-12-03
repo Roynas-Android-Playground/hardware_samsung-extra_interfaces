@@ -16,14 +16,16 @@
 
 #define LOG_TAG "bootlogger"
 
+#include <log/log.h>
 #include <android-base/properties.h>
+
 #include <errno.h>
 #include <fcntl.h>
-#include <log/log.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
 #include <atomic>
+#include <cstring>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -42,32 +44,30 @@ struct LoggerContext;
 
 // Base context for outputs with file
 struct OutputContext {
-  // Fetch out file name of this context.
-  // Note that .txt suffix is auto appended.
-  virtual std::string getFileName(void) const = 0;
+  // File path (absolute)  of this context.
+  // Note that .txt suffix is auto appended in constructor.
+  std::string kFilePath;
+  // Just the filename only
+  std::string kFileName;
 
-  /**
-   * Returns absolute path of output
-   * Basically a wrapper of [getFileName]
-   *
-   * @return absolute path of out
-   */
-  std::string getOutFilePath(void) const {
+  // Takes one argument 'filename' without file extension
+  OutputContext(const std::string& filename) : kFileName(filename) {
     static std::string kLogDir = "/data/debug/";
-    return kLogDir + getFileName() + ".txt";
+    kFilePath = kLogDir + kFileName + ".txt";
   }
+  // No default constructor
+  OutputContext() = delete;
 
   /**
    * Open outfilestream.
    */
   bool openOutput(void) {
-    auto out = getOutFilePath();
-    ALOGI("%s: Open %s", __func__, out.c_str());
-    std::remove(out.c_str());
-    ofs = std::ofstream(out);
+    ALOGI("%s: Open %s", __func__, kFilePath.c_str());
+    std::remove(kFilePath.c_str());
+    ofs = std::ofstream(kFilePath);
     bool ok = ofs.good();
     if (!ok) 
-       PLOGE("%s: Failed to open %s", __func__, out.c_str());
+       PLOGE("%s: Failed to open %s", __func__, kFilePath.c_str());
     return ok;
   }
 
@@ -76,7 +76,7 @@ struct OutputContext {
    *
    * @param string data
    */
-  void writeStringToOutput(const std::string &data) {
+  void writeToOutput(const std::string &data) {
     ofs << data << std::endl;
   }
 
@@ -87,7 +87,7 @@ struct OutputContext {
    */
   void delOutputContext() {
      struct stat buf {};
-     auto path = getOutFilePath();
+     auto& path = kFilePath;
      int rc = stat(path.c_str(), &buf);
      if (rc == 0 && buf.st_size == 0) {
         ALOGD("Deleting %s because it is empty", path.c_str());
@@ -104,15 +104,16 @@ struct OutputContext {
 /**
  * Filter support to LoggerContext's stream and outputting to a file.
  */
-struct LogFilterContext : OutputContext {
+struct LogFilterContext {
   // Function to be invoked to filter
-  virtual bool filter(const std::string &line) const = 0;
-  virtual std::string getFilterName(void) const = 0;
-  std::string getFileName(void) const override;
-  void setParent(LoggerContext *_parent) { parent = _parent; }
-
- private:
-  LoggerContext *parent = nullptr;
+  // Note: Modifiable
+  virtual bool filter(std::string &line) const = 0;
+  // Filter name, must be a vaild file name itself.
+  std::string kFilterName;
+  // Constructor accepting filtername
+  LogFilterContext(const std::string& name) : kFilterName(name) {}
+  // No default one
+  LogFilterContext() = delete;
 };
 
 struct LoggerContext : OutputContext {
@@ -135,11 +136,8 @@ struct LoggerContext : OutputContext {
    *
    * @param ctx The context to register
    */
-  void registerLogFilter(LogFilterContext *ctx) {
-    if (ctx) {
-      filters.emplace_back(ctx);
-      ctx->setParent(this);
-    }
+  void registerLogFilter(std::shared_ptr<LogFilterContext> ctx) {
+    filters.emplace(ctx, (ctx->kFilterName + '.' + name));
   }
 
   /**
@@ -151,57 +149,50 @@ struct LoggerContext : OutputContext {
     char buf[1024] = {0};
     auto fp = openSource();
     if (fp) {
-      int fd = fileno(fp);
-      int flags = fcntl(fd, F_GETFL);
-      if (!(flags & O_NONBLOCK)) {
-        flags |= O_NONBLOCK;
-        fcntl(fd, F_SETFL, flags);
-      }
-      bool ret = openOutput();
-      if (ret) {
+      if (openOutput()) {
         for (auto &f : filters) {
-          f->openOutput();
+          f.second.openOutput();
         }
         while (*run) {
           auto ret = fgets(buf, sizeof(buf), fp);
           std::istringstream ss(buf);
           std::string line;
           if (ret) {
-            while (getline(ss, line)) {
+            while (std::getline(ss, line)) {
               for (auto &f : filters) {
-                if (*f && f->filter(line)) f->writeStringToOutput(line);
+                std::string fline = line;
+                if (f.first->filter(fline))
+                  f.second.writeToOutput(fline);
               }
-              writeStringToOutput(line);
+              writeToOutput(line);
             }
           }
         }
+        for (auto &f : filters) {
+          f.second.delOutputContext();
+        }
         // ofstream will auto close
       } else {
-        PLOGE("[Context %s] Open output '%s'", getFileName().c_str(),
-              getOutFilePath().c_str());
+        PLOGE("[Context %s] Open output '%s'", kFileName.c_str(), kFilePath.c_str());
       }
       closeSource(fp);
     } else {
-      PLOGE("[Context %s] Open source", getFileName().c_str());
+      PLOGE("[Context %s] Open source", kFileName.c_str());
     }
   }
+  LoggerContext(const std::string &fname) : OutputContext(fname), name(fname) {}
   virtual ~LoggerContext() {};
 
  private:
-  std::vector<LogFilterContext *> filters;
+  std::string name;
+  std::map<std::shared_ptr<LogFilterContext>, OutputContext> filters;
 };
-
-// Due to referencing LoggerContext::getFileName()
-std::string LogFilterContext::getFileName(void) const {
-  return getFilterName() +
-         (parent ? std::string(".") + parent->getFileName() : "");
-}
 
 // DMESG
 struct DmesgContext : LoggerContext {
   FILE *openSource(void) override { return fopen("/proc/kmsg", "r"); }
   void closeSource(FILE *fp) override { fclose(fp); }
-  std::string getFileName() const override { return "kmsg"; }
+  DmesgContext() : LoggerContext("kmsg") {}
   ~DmesgContext() override { delOutputContext(); }
 };
 
@@ -209,13 +200,13 @@ struct DmesgContext : LoggerContext {
 struct LogcatContext : LoggerContext {
   FILE *openSource(void) override { return popen("/system/bin/logcat", "r"); }
   void closeSource(FILE *fp) override { pclose(fp); }
-  std::string getFileName() const override { return "logcat"; }
+  LogcatContext() : LoggerContext("logcat") {}
   ~LogcatContext() override { delOutputContext(); }
 };
 
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
-  bool filter(const std::string &line) const override {
+  bool filter(std::string &line) const override {
     const static auto kAvcMessageRegEX = std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
     const static auto kPropertyAccessRegEX = std::regex(R"(libc\s+:\s+Access\sdenied\sfinding)");
     bool kMatch = false;
@@ -226,8 +217,7 @@ struct AvcFilterContext : LogFilterContext {
     kMatch |= std::regex_search(line, kPropertyAccessRegEX);
     return kMatch;
   }
-  std::string getFilterName(void) const override { return "avc"; }
-  ~AvcFilterContext() override { delOutputContext(); }
+  AvcFilterContext() : LogFilterContext("avc") {}
 };
 
 int main(void) {
@@ -235,19 +225,18 @@ int main(void) {
   std::atomic_bool run;
 
   DmesgContext kDmesgCtx;
-  AvcFilterContext kDmesgAvcFilter;
   LogcatContext kLogcatCtx;
-  AvcFilterContext kLogcatAvcFilter;
+  auto kAvcFilter = std::make_shared<AvcFilterContext>();
 
   run = true;
 
   // If this prop is true, logd logs kernel message to logcat
   // Don't make duplicate (Also it will race against kernel logs)
   if (!GetBoolProperty("ro.logd.kernel", false)) {
-      kDmesgCtx.registerLogFilter(&kDmesgAvcFilter);
+      kDmesgCtx.registerLogFilter(kAvcFilter);
       threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
   }
-  kLogcatCtx.registerLogFilter(&kLogcatAvcFilter);
+  kLogcatCtx.registerLogFilter(kAvcFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
   WaitForProperty("sys.boot_completed", "1");
