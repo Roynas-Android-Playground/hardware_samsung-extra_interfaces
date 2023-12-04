@@ -114,7 +114,8 @@ public:
 SmartCharge::SmartCharge(void) {
   {
     ConfigPair<int> ret{};
-    if (getAndParse(kSmartChargeConfigProp, &ret) && verifyConfig(ret.first, ret.second)) {
+    if (getAndParse(kSmartChargeConfigProp, &ret) &&
+        verifyConfig(ret.first, ret.second)) {
       upper = ret.second;
       lower = ret.first;
       ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
@@ -135,7 +136,8 @@ SmartCharge::SmartCharge(void) {
       } else
         ALOGD("%s: Not starting loop", __func__);
     } else {
-      ALOGE("%s: Enabled prop value invaild, resetting to valid one...", __func__);
+      ALOGE("%s: Enabled prop value invaild, resetting to valid one...",
+            __func__);
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
     }
   }
@@ -151,6 +153,7 @@ void SmartCharge::startLoop(bool withrestart) {
   bool initdone = false;
   ChargeStatus tmp, status = ChargeStatus::NOOP;
   ALOGD("%s: ++", __func__);
+  std::unique_lock<std::mutex> lock(kCVLock);
   while (kRun.load()) {
     auto per = BatteryHelper::getPercent();
     if (per < 0) {
@@ -181,15 +184,19 @@ void SmartCharge::startLoop(bool withrestart) {
       status = tmp;
       initdone = true;
     }
-    std::this_thread::sleep_for(5s);
+    if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
+      // cv signaled, exit now
+      break;
+    }
   }
+  lock.unlock();
   ALOGD("%s: --", __func__);
 }
 
-void SmartCharge::createLoopThread(bool restart)
-{
+void SmartCharge::createLoopThread(bool restart) {
   ALOGD("%s: create thread", __func__);
-  kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
+  kLoopThread =
+      std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
@@ -227,15 +234,16 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   if (enable) {
     kRun.store(true);
     if (kLoopThread) {
-        ALOGW("Thread is running?");
+      ALOGW("Thread is running?");
     } else {
-        createLoopThread(restart);
+      createLoopThread(restart);
     }
   } else {
     kRun.store(false);
     BatteryHelper::setChargable(true);
     if (kLoopThread) {
       if (kLoopThread->joinable()) {
+        cv.notify_one();
         kLoopThread->join();
       }
       kLoopThread.reset();

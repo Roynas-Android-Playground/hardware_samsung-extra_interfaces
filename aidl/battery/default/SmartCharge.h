@@ -9,6 +9,7 @@
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
 
 #include <atomic>
+#include <condition_variable>
 #include <mutex>
 #include <thread>
 
@@ -27,6 +28,10 @@ class SmartCharge : public BnSmartCharge {
   void createLoopThread(bool restart);
   std::atomic_bool kRun;
   std::mutex config_lock;
+
+  std::condition_variable cv;
+  // Used by above condition_variable
+  std::mutex kCVLock;
 
 public:
   SmartCharge();
