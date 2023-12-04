@@ -37,7 +37,7 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
 		    *_aidl_return = 0;
 		    break;
 	    case 1:
-		    *_aidl_return = GetIntProperty(FLASH_BRIGHTNESS_PROP, level_saved, 0, 1010);
+		    *_aidl_return = GetIntProperty(FLASH_BRIGHTNESS_PROP, level_saved, 0, 5);
 		    break;
 	    case 1001:
 		    *_aidl_return = 1;
