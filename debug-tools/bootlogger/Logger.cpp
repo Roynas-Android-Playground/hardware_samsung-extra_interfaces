@@ -70,7 +70,8 @@ struct OutputContext {
           is_filter ? " (filter)" : "");
     std::remove(kFilePathStr);
     fd = open(kFilePathStr, O_RDWR | O_CREAT, 0644);
-    if (fd < 0) PLOGE("Failed to open '%s'", kFilePathStr);
+    if (fd < 0)
+      PLOGE("Failed to open '%s'", kFilePathStr);
     return fd >= 0;
   }
 
@@ -106,7 +107,7 @@ struct OutputContext {
 
   virtual ~OutputContext() {}
 
- private:
+private:
   int fd = -1;
   int len = 0;
   bool is_filter = false;
@@ -121,6 +122,9 @@ struct LogFilterContext {
   virtual bool filter(std::string &line) const = 0;
   // Filter name, must be a vaild file name itself.
   std::string kFilterName;
+  // Provide a single constant for regEX usage
+  const std::regex_constants::match_flag_type kRegexMatchflags =
+      std::regex_constants::format_sed;
   // Constructor accepting filtername
   LogFilterContext(const std::string &name) : kFilterName(name) {}
   // No default one
@@ -239,21 +243,28 @@ struct LogcatContext : LoggerContext {
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
   bool filter(std::string &line) const override {
+    // Matches "avc: denied { ioctl } for comm=..." for example
     const static auto kAvcMessageRegEX =
         std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
+    return std::regex_search(line, kAvcMessageRegEX, kRegexMatchflags);
+  }
+  AvcFilterContext() : LogFilterContext("avc") {}
+  ~AvcFilterContext() override = default;
+};
+
+// Filters - libc property
+struct libcPropFilterContext : LogFilterContext {
+  bool filter(std::string &line) const override {
     // libc : Access denied finding property "
     const static auto kPropertyAccessRegEX =
         std::regex(R"(libc\s+:\s+\w+\s\w+\s\w+\s\w+\s\")");
     static std::vector<std::string> propsDenied;
     std::smatch kPropMatch;
-    bool kMatch = false;
-    const static auto flags = std::regex_constants::format_sed;
 
-    // Matches "avc: denied { ioctl } for comm=..." for example
-    kMatch |= std::regex_search(line, kAvcMessageRegEX, flags);
     // Matches "libc : Access denied finding property ..."
-    if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX, flags)) {
-      // Trim property name
+    if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX,
+                          kRegexMatchflags)) {
+      // Trim property name from "property: \"ro.a.b\""
       // line: property "{prop name}"
       line = line.substr(kPropMatch.length());
       // line: {prop name}"
@@ -261,13 +272,13 @@ struct AvcFilterContext : LogFilterContext {
       if (std::find(propsDenied.begin(), propsDenied.end(), line) ==
           propsDenied.end()) {
         propsDenied.emplace_back(line);
-        kMatch = true;
+        return true;
       }
     }
-    return kMatch;
+    return false;
   }
-  AvcFilterContext() : LogFilterContext("avc") {}
-  ~AvcFilterContext() override = default;
+  libcPropFilterContext() : LogFilterContext("libc_props") {}
+  ~libcPropFilterContext() override = default;
 };
 
 int main(void) {
@@ -279,6 +290,7 @@ int main(void) {
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
   std::shared_ptr<AvcFilterContext> kAvcFilter(nullptr);
+  auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
 
   ALOGI("Logger starting...");
 
@@ -302,6 +314,7 @@ int main(void) {
     threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
   }
   kLogcatCtx.registerLogFilter(kAvcFilter);
+  kLogcatCtx.registerLogFilter(kLibcPropsFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
   WaitForProperty("sys.boot_completed", "1");
