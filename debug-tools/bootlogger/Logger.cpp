@@ -289,7 +289,7 @@ int main(void) {
 
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
-  std::shared_ptr<AvcFilterContext> kAvcFilter(nullptr);
+  auto kAvcFilter = std::make_shared<AvcFilterContext>();
   auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
 
   ALOGI("Logger starting...");
@@ -298,10 +298,10 @@ int main(void) {
   if (rc == 0) {
     if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
       ALOGD("Detected CONFIG_AUDIT=y in kernel configuration");
-      kAvcFilter = std::make_shared<AvcFilterContext>();
     } else {
       ALOGI("Kernel configuration does not have CONFIG_AUDIT=y,"
             " disabling avc filters.");
+      kAvcFilter.reset();
     }
   }
 
