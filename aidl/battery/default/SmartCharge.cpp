@@ -12,6 +12,7 @@
 #include <log/log.h>
 
 #include <chrono>
+#include <functional>
 #include <sstream>
 #include <type_traits>
 
@@ -72,9 +73,10 @@ bool fromString(const std::string &v, ConfigPair<U> *pair) {
 }
 
 template <>
-bool fromString(const std::string& v, ConfigPair<bool> *pair) {
-  ConfigPair<int> tmp {};
-  if (fromString<int>(v, &tmp) && isValidBool(tmp.first) && isValidBool(tmp.second)) {
+bool fromString(const std::string &v, ConfigPair<bool> *pair) {
+  ConfigPair<int> tmp{};
+  if (fromString<int>(v, &tmp) && isValidBool(tmp.first) &&
+      isValidBool(tmp.second)) {
     pair->first = tmp.first;
     pair->second = tmp.second;
     return true;
@@ -110,40 +112,33 @@ public:
 };
 
 SmartCharge::SmartCharge(void) {
-  kPoolPtr = std::make_shared<ThreadPool>(3);
-#define func "SmartCharge()"
-  kPoolPtr->Enqueue([this] {
-    {
-      ConfigPair<int> ret{};
-      if (getAndParse(kSmartChargeConfigProp, &ret) &&
-          verifyConfig(ret.first, ret.second)) {
-        upper = ret.second;
-        lower = ret.first;
-        ALOGD("%s: upper: %d, lower: %d", func, upper, lower);
-      } else {
-        upper = -1;
-        lower = -1;
-        ALOGW("%s: Parsing config failed", func);
-        return;
-      }
+  {
+    ConfigPair<int> ret{};
+    if (getAndParse(kSmartChargeConfigProp, &ret) && verifyConfig(ret.first, ret.second)) {
+      upper = ret.second;
+      lower = ret.first;
+      ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
+    } else {
+      upper = -1;
+      lower = -1;
+      ALOGW("%s: Parsing config failed", __func__);
+      return;
     }
-    {
-      ConfigPair<bool> ret{};
-      if (getAndParse(kSmartChargeEnabledProp, &ret)) {
-        if (ret.first) {
-          ALOGD("%s: Starting loop, withrestart: %d", func, ret.second);
-          kRun.store(true);
-          startLoop(ret.second);
-        } else
-          ALOGD("%s: Not starting loop", func);
-      } else {
-        ALOGE("%s: Enabled prop value invaild, resetting to valid one...",
-              func);
-        SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
-      }
+  }
+  {
+    ConfigPair<bool> ret{};
+    if (getAndParse(kSmartChargeEnabledProp, &ret)) {
+      if (ret.first) {
+        ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
+        kRun.store(true);
+        createLoopThread(ret.second);
+      } else
+        ALOGD("%s: Not starting loop", __func__);
+    } else {
+      ALOGE("%s: Enabled prop value invaild, resetting to valid one...", __func__);
+      SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
     }
-  });
-#undef func
+  }
 }
 
 enum ChargeStatus {
@@ -191,6 +186,12 @@ void SmartCharge::startLoop(bool withrestart) {
   ALOGD("%s: --", __func__);
 }
 
+void SmartCharge::createLoopThread(bool restart)
+{
+  ALOGD("%s: create thread", __func__);
+  kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
+}
+
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
   ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_,
         kRun.load());
@@ -225,11 +226,22 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   }
   if (enable) {
     kRun.store(true);
-    kPoolPtr->Enqueue([this](bool withrestart) { startLoop(withrestart); },
-                      restart);
+    if (kLoopThread) {
+        ALOGW("Thread is running?");
+    } else {
+        createLoopThread(restart);
+    }
   } else {
     kRun.store(false);
     BatteryHelper::setChargable(true);
+    if (kLoopThread) {
+      if (kLoopThread->joinable()) {
+        kLoopThread->join();
+      }
+      kLoopThread.reset();
+    } else {
+      ALOGW("No threads to stop?");
+    }
   }
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();

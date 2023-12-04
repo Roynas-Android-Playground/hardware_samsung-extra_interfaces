@@ -1,4 +1,0 @@
-cc_library_headers {
-    name: "libext_threadpool",
-    export_include_dirs: ["."],
-}

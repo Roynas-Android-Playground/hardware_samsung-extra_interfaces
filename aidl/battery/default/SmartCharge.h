@@ -10,8 +10,7 @@
 
 #include <atomic>
 #include <mutex>
-
-#include "ThreadPool.h"
+#include <thread>
 
 namespace aidl {
 namespace vendor {
@@ -20,20 +19,23 @@ namespace framework {
 namespace battery {
 
 class SmartCharge : public BnSmartCharge {
-  std::shared_ptr<ThreadPool> kPoolPtr;
+  std::shared_ptr<std::thread> kLoopThread;
   int upper, lower;
+  // Worker function
   void startLoop(bool withrestart);
+  // Starter function
+  void createLoopThread(bool restart);
   std::atomic_bool kRun;
   std::mutex config_lock;
 
- public:
+public:
   SmartCharge();
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;
   ndk::ScopedAStatus activate(bool enable, bool restart) override;
 };
 
-}  // namespace battery
-}  // namespace framework
-}  // namespace samsung_ext
-}  // namespace vendor
-}  // namespace aidl
+} // namespace battery
+} // namespace framework
+} // namespace samsung_ext
+} // namespace vendor
+} // namespace aidl

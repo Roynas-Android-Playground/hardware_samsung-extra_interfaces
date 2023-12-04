@@ -20,6 +20,5 @@ cc_binary {
         "libsafestoi",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
-    header_libs: ["libext_threadpool"],
     system_ext_specific: true,
 }
