@@ -24,6 +24,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -37,6 +38,9 @@
 
 using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
+namespace fs = std::filesystem;
+
+#define LOG_DIRECTORY "/data/debug"
 
 // Base context for outputs with file
 struct OutputContext {
@@ -48,7 +52,7 @@ struct OutputContext {
 
   // Takes one argument 'filename' without file extension
   OutputContext(const std::string &filename) : kFileName(filename) {
-    static std::string kLogDir = "/data/debug/";
+    static std::string kLogDir = LOG_DIRECTORY;
     kFilePath = kLogDir + kFileName + ".txt";
   }
 
@@ -66,9 +70,7 @@ struct OutputContext {
    */
   bool openOutput(void) {
     const char *kFilePathStr = kFilePath.c_str();
-    ALOGI("%s: Opening '%s'%s", __func__, kFilePathStr,
-          is_filter ? " (filter)" : "");
-    std::remove(kFilePathStr);
+    ALOGI("%s: Opening '%s'%s", __func__, kFilePathStr, is_filter ? " (filter)" : "");
     fd = open(kFilePathStr, O_RDWR | O_CREAT, 0644);
     if (fd < 0)
       PLOGE("Failed to open '%s'", kFilePathStr);
@@ -287,6 +289,7 @@ struct libcPropFilterContext : LogFilterContext {
 int main(void) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
+  std::error_code ec;
   KernelConfig_t kConfig;
   int rc;
 
@@ -297,13 +300,28 @@ int main(void) {
 
   ALOGI("Logger starting...");
 
+  for (auto const& ent : fs::directory_iterator(LOG_DIRECTORY, ec)) {
+    fs::remove(ent, ec);
+    if (ec) {
+      ALOGW("Cannot remove '%s'", ent.path().string().c_str());
+      ec.clear();
+    }
+  }
+  // If error_code is set here, it means from the directory_iterator,
+  // as error code is always cleared if failure inside the loop.
+  if (ec) {
+    ALOGE("Failed to remove files in log directory");
+    ec.clear();
+  } else {
+    ALOGI("Cleared log directory files");
+  }
+
   rc = ReadKernelConfig(kConfig);
   if (rc == 0) {
     if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
       ALOGD("Detected CONFIG_AUDIT=y in kernel configuration");
     } else {
-      ALOGI("Kernel configuration does not have CONFIG_AUDIT=y,"
-            " disabling avc filters.");
+      ALOGI("Kernel configuration does not have CONFIG_AUDIT=y, disabling avc filters.");
       kAvcFilter.reset();
     }
   }

@@ -21,7 +21,10 @@ cc_binary {
         "KernelConfig.cpp"
     ],
     init_rc: ["logger.rc"],
-    whole_static_libs: ["libbase"],
+    whole_static_libs: [
+        "libbase",
+        "libc++fs",
+    ],
     shared_libs: [
         "liblog",
         "libz",
