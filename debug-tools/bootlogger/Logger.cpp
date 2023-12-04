@@ -266,7 +266,7 @@ struct libcPropFilterContext : LogFilterContext {
                           kRegexMatchflags)) {
       // Trim property name from "property: \"ro.a.b\""
       // line: property "{prop name}"
-      line = line.substr(kPropMatch.length());
+      line = kPropMatch.suffix();
       // line: {prop name}"
       line = line.substr(0, line.find_first_of('"'));
       if (std::find(propsDenied.begin(), propsDenied.end(), line) ==
