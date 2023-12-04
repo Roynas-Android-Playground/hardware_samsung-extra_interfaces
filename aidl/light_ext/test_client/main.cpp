@@ -13,12 +13,10 @@
 using aidl::android::hardware::light::ILights;
 using aidl::vendor::samsung_ext::hardware::light::IExtLights;
 
-using android::base::GetProperty;
+using android::base::GetBoolProperty;
 using android::base::SetProperty;
 
 int main(void) {
-  static const std::string false_s = std::to_string(false);
-  std::string propval;
   android::status_t status;
   std::shared_ptr<IExtLights> extsvc;
   static const char SUNLIGHT_ENABLED_PROP[] = "persist.vendor.ext.sunlight.on";
@@ -40,18 +38,7 @@ int main(void) {
     printf("In IFlashlight::fromBinder: IExtLights object is NULL\n");
     goto exit;
   }
-  propval = GetProperty(SUNLIGHT_ENABLED_PROP, false_s);
-  switch (*propval.c_str()) {
-  case '1':
-    enable_todo = false;
-    break;
-  case '0':
-    enable_todo = true;
-    break;
-  default:
-    printf("In GetProperty: Property value %s invalid.\n", propval.c_str());
-    goto exit;
-  }
+  enable_todo = !GetBoolProperty(SUNLIGHT_ENABLED_PROP, false);
   SetProperty(SUNLIGHT_ENABLED_PROP, std::to_string(enable_todo));
   extsvc->onPropsChanged();
   return 0;
