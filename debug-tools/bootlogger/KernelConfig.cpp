@@ -99,7 +99,8 @@ static bool parseOneConfigLine(
       // # CONFIG_AAA is not set
       // Space after AAA being the delimiter.
       // '# ', size 2
-      config = line.substr(2).substr(0, config.find_first_of(' '));
+      config = line.substr(2);
+      config = config.substr(0, config.find_first_of(' '));
       break;
     case UNKNOWN:
       __builtin_unreachable();
