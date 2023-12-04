@@ -18,7 +18,7 @@ namespace hardware {
 namespace camera {
 namespace flashlight {
 
-using ::android::base::GetProperty;
+using ::android::base::GetIntProperty;
 using ::android::base::ReadFileToString;
 using ::android::base::SetProperty;
 using ::android::base::WriteStringToFile;
@@ -37,7 +37,7 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
 		    *_aidl_return = 0;
 		    break;
 	    case 1:
-		    *_aidl_return = stoi_safe(GetProperty(FLASH_BRIGHTNESS_PROP, "1"), level_saved);
+		    *_aidl_return = GetIntProperty(FLASH_BRIGHTNESS_PROP, level_saved, 0, 1010);
 		    break;
 	    case 1001:
 		    *_aidl_return = 1;
