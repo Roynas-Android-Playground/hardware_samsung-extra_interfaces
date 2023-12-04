@@ -119,7 +119,7 @@ private:
 struct LogFilterContext {
   // Function to be invoked to filter
   // Note: The line passed to this function is modifiable.
-  virtual bool filter(std::string &line) const = 0;
+  virtual bool filter(const std::string &line) const = 0;
   // Filter name, must be a vaild file name itself.
   std::string kFilterName;
   // Provide a single constant for regEX usage
@@ -242,7 +242,7 @@ struct LogcatContext : LoggerContext {
 
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
-  bool filter(std::string &line) const override {
+  bool filter(const std::string &line) const override {
     // Matches "avc: denied { ioctl } for comm=..." for example
     const static auto kAvcMessageRegEX =
         std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
@@ -254,7 +254,7 @@ struct AvcFilterContext : LogFilterContext {
 
 // Filters - libc property
 struct libcPropFilterContext : LogFilterContext {
-  bool filter(std::string &line) const override {
+  bool filter(const std::string &line) const override {
     // libc : Access denied finding property "
     const static auto kPropertyAccessRegEX =
         std::regex(R"(libc\s+:\s+\w+\s\w+\s\w+\s\w+\s\")");
@@ -266,12 +266,12 @@ struct libcPropFilterContext : LogFilterContext {
                           kRegexMatchflags)) {
       // Trim property name from "property: \"ro.a.b\""
       // line: property "{prop name}"
-      line = kPropMatch.suffix();
+      std::string prop = kPropMatch.suffix();
       // line: {prop name}"
-      line = line.substr(0, line.find_first_of('"'));
-      if (std::find(propsDenied.begin(), propsDenied.end(), line) ==
+      prop = prop.substr(0, prop.find_first_of('"'));
+      if (std::find(propsDenied.begin(), propsDenied.end(), prop) ==
           propsDenied.end()) {
-        propsDenied.emplace_back(line);
+        propsDenied.emplace_back(prop);
         return true;
       }
     }
