@@ -38,8 +38,6 @@
 using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
 
-struct LoggerContext;
-
 // Base context for outputs with file
 struct OutputContext {
   // File path (absolute)  of this context.
@@ -67,14 +65,13 @@ struct OutputContext {
    * Open outfilestream.
    */
   bool openOutput(void) {
-    ALOGI("%s: Opening '%s'%s", __func__, kFilePath.c_str(),
+    const char *kFilePathStr = kFilePath.c_str();
+    ALOGI("%s: Opening '%s'%s", __func__, kFilePathStr,
           is_filter ? " (filter)" : "");
-    std::remove(kFilePath.c_str());
-    ofs = std::ofstream(kFilePath);
-    bool ok = ofs.good();
-    if (!ok)
-      PLOGE("Failed to open '%s'", kFilePath.c_str());
-    return ok;
+    std::remove(kFilePathStr);
+    fd = open(kFilePathStr, O_RDWR | O_CREAT, 0644);
+    if (fd < 0) PLOGE("Failed to open '%s'", kFilePathStr);
+    return fd >= 0;
   }
 
   /**
@@ -82,28 +79,37 @@ struct OutputContext {
    *
    * @param string data
    */
-  void writeToOutput(const std::string &data) { ofs << data << std::endl; }
+  void writeToOutput(const std::string &data) {
+    len += write(fd, data.c_str(), data.size());
+    len += write(fd, "\n", 1);
+    if (len > BUF_SIZE) {
+      fsync(fd);
+      len = 0;
+    }
+  }
 
-  operator bool() const { return ofs.good(); }
+  operator bool() const { return fd >= 0; }
 
   /**
    * To be called on ~OutputContext Sub-classes
    */
   void cleanupOutputCtx() {
     struct stat buf {};
-    auto &path = kFilePath;
-    int rc = stat(path.c_str(), &buf);
+    int rc = fstat(fd, &buf);
     if (rc == 0 && buf.st_size == 0) {
-      ALOGD("Deleting '%s' because it is empty", path.c_str());
-      std::remove(path.c_str());
+      ALOGD("Deleting '%s' because it is empty", kFilePath.c_str());
+      std::remove(kFilePath.c_str());
     }
+    close(fd);
+    fd = -1;
   }
 
   virtual ~OutputContext() {}
 
-private:
-  std::ofstream ofs;
-  bool is_filter;
+ private:
+  int fd = -1;
+  int len = 0;
+  bool is_filter = false;
 };
 
 /**
@@ -167,6 +173,13 @@ struct LoggerContext : OutputContext {
         for (auto &f : filters) {
           f.second->openOutput();
         }
+        // Erase failed-to-open contexts
+        for (auto it = filters.begin(), last = filters.end(); it != last;) {
+          if (!it->second.get())
+            it = filters.erase(it);
+          else
+            ++it;
+        }
         while (*run) {
           auto ret = fgets(buf, sizeof(buf), fp);
           std::istringstream ss(buf);
@@ -202,7 +215,8 @@ struct LoggerContext : OutputContext {
 
 private:
   std::string name;
-  std::map<std::shared_ptr<LogFilterContext>, std::unique_ptr<OutputContext>>
+  std::unordered_map<std::shared_ptr<LogFilterContext>,
+                     std::unique_ptr<OutputContext>>
       filters;
 };
 
