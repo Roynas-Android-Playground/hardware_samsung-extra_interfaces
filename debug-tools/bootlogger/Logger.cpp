@@ -269,8 +269,11 @@ struct libcPropFilterContext : LogFilterContext {
       std::string prop = kPropMatch.suffix();
       // line: {prop name}"
       prop = prop.substr(0, prop.find_first_of('"'));
-      if (std::find(propsDenied.begin(), propsDenied.end(), prop) ==
-          propsDenied.end()) {
+      // Starts with ctl. ?
+      if (prop.find("ctl.") == 0)
+        return true;
+      // Cache the properties
+      if (std::find(propsDenied.begin(), propsDenied.end(), prop) == propsDenied.end()) {
         propsDenied.emplace_back(prop);
         return true;
       }
