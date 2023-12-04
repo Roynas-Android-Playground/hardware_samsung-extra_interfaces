@@ -14,12 +14,9 @@
  * limitations under the License.
  */
 
-#define LOG_TAG "bootlogger"
-
 #include <android-base/properties.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <log/log.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -36,10 +33,10 @@
 #include <thread>
 #include <vector>
 
+#include "LoggerInternal.h"
+
 using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
-
-#define PLOGE(fmt, ...) ALOGE(fmt ": %s", ##__VA_ARGS__, strerror(errno))
 
 struct LoggerContext;
 
@@ -75,7 +72,8 @@ struct OutputContext {
     std::remove(kFilePath.c_str());
     ofs = std::ofstream(kFilePath);
     bool ok = ofs.good();
-    if (!ok) PLOGE("%s: Failed to open '%s'", __func__, kFilePath.c_str());
+    if (!ok)
+      PLOGE("Failed to open '%s'", kFilePath.c_str());
     return ok;
   }
 
@@ -103,7 +101,7 @@ struct OutputContext {
 
   virtual ~OutputContext() {}
 
- private:
+private:
   std::ofstream ofs;
   bool is_filter;
 };
@@ -146,11 +144,13 @@ struct LoggerContext : OutputContext {
    * @param ctx The context to register
    */
   void registerLogFilter(std::shared_ptr<LogFilterContext> ctx) {
-    ALOGD("%s: registered filter '%s' to '%s' logger", __func__,
-          ctx->kFilterName.c_str(), name.c_str());
-    filters.emplace(
-        ctx, std::make_unique<OutputContext>(ctx->kFilterName + '.' + name,
-                                             /*isFilter*/ true));
+    if (ctx) {
+      ALOGD("%s: registered filter '%s' to '%s' logger", __func__,
+            ctx->kFilterName.c_str(), name.c_str());
+      filters.emplace(
+          ctx, std::make_unique<OutputContext>(ctx->kFilterName + '.' + name,
+                                               /*isFilter*/ true));
+    }
   }
 
   /**
@@ -159,9 +159,10 @@ struct LoggerContext : OutputContext {
    * @param run Pointer to run/stop control variable
    */
   void startLogger(std::atomic_bool *run) {
-    char buf[1024] = {0};
+    char buf[BUF_SIZE];
     auto fp = openSource();
     if (fp) {
+      memset(buf, 0, BUF_SIZE);
       if (openOutput()) {
         for (auto &f : filters) {
           f.second->openOutput();
@@ -174,7 +175,8 @@ struct LoggerContext : OutputContext {
             while (std::getline(ss, line)) {
               for (auto &f : filters) {
                 std::string fline = line;
-                if (f.first->filter(fline)) f.second->writeToOutput(fline);
+                if (f.first->filter(fline))
+                  f.second->writeToOutput(fline);
               }
               writeToOutput(line);
             }
@@ -198,7 +200,7 @@ struct LoggerContext : OutputContext {
   }
   virtual ~LoggerContext(){};
 
- private:
+private:
   std::string name;
   std::map<std::shared_ptr<LogFilterContext>, std::unique_ptr<OutputContext>>
       filters;
@@ -257,10 +259,25 @@ struct AvcFilterContext : LogFilterContext {
 int main(void) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
+  KernelConfig_t kConfig;
+  int rc;
 
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
-  auto kAvcFilter = std::make_shared<AvcFilterContext>();
+  std::shared_ptr<AvcFilterContext> kAvcFilter(nullptr);
+
+  ALOGI("Logger starting...");
+
+  rc = ReadKernelConfig(kConfig);
+  if (rc == 0) {
+    if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
+      ALOGD("Detected CONFIG_AUDIT=y in kernel configuration");
+      kAvcFilter = std::make_shared<AvcFilterContext>();
+    } else {
+      ALOGI("Kernel configuration does not have CONFIG_AUDIT=y,"
+            " disabling avc filters.");
+    }
+  }
 
   run = true;
 
@@ -275,6 +292,7 @@ int main(void) {
 
   WaitForProperty("sys.boot_completed", "1");
   run = false;
-  for (auto &i : threads) i.join();
+  for (auto &i : threads)
+    i.join();
   return 0;
 }

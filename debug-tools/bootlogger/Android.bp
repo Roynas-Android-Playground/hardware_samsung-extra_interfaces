@@ -18,9 +18,13 @@ cc_binary {
     name: "logger",
     srcs: [
         "Logger.cpp",
+        "KernelConfig.cpp"
     ],
     init_rc: ["logger.rc"],
     whole_static_libs: ["libbase"],
-    shared_libs: ["liblog"],
+    shared_libs: [
+        "liblog",
+        "libz",
+    ],
     system_ext_specific: true,
 }
