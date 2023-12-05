@@ -15,6 +15,7 @@
  */
 
 #include <android-base/properties.h>
+#include <cstdlib>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -40,7 +41,8 @@ using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
 namespace fs = std::filesystem;
 
-#define LOG_DIRECTORY "/data/debug"
+// TODO is there anything better than global variable?
+static std::string kLogDir;
 
 // Base context for outputs with file
 struct OutputContext {
@@ -52,7 +54,6 @@ struct OutputContext {
 
   // Takes one argument 'filename' without file extension
   OutputContext(const std::string &filename) : kFileName(filename) {
-    static std::string kLogDir = LOG_DIRECTORY;
     kFilePath = kLogDir + kFileName + ".txt";
   }
 
@@ -286,12 +287,18 @@ struct libcPropFilterContext : LogFilterContext {
   ~libcPropFilterContext() override = default;
 };
 
-int main(void) {
+int main(int argc, const char** argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
   std::error_code ec;
   KernelConfig_t kConfig;
   int rc;
+
+  if (argc != 2) {
+    fprintf(stderr, "Usage: %s [log directory]", argv[0]);
+    return EXIT_FAILURE;
+  }
+  kLogDir = argv[1];
 
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
@@ -300,7 +307,7 @@ int main(void) {
 
   ALOGI("Logger starting...");
 
-  for (auto const& ent : fs::directory_iterator(LOG_DIRECTORY, ec)) {
+  for (auto const& ent : fs::directory_iterator(kLogDir, ec)) {
     fs::remove(ent, ec);
     if (ec) {
       ALOGW("Cannot remove '%s'", ent.path().string().c_str());
