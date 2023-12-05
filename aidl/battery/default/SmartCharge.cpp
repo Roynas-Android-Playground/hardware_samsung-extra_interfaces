@@ -194,9 +194,9 @@ void SmartCharge::startLoop(bool withrestart) {
 }
 
 void SmartCharge::createLoopThread(bool restart) {
+  const std::lock_guard<std::mutex> _(thread_lock);
   ALOGD("%s: create thread", __func__);
-  kLoopThread =
-      std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
+  kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
@@ -242,6 +242,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     kRun.store(false);
     BatteryHelper::setChargable(true);
     if (kLoopThread) {
+      const std::lock_guard<std::mutex> _(thread_lock);
       if (kLoopThread->joinable()) {
         cv.notify_one();
         kLoopThread->join();

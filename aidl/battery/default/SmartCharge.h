@@ -21,13 +21,20 @@ namespace battery {
 
 class SmartCharge : public BnSmartCharge {
   std::shared_ptr<std::thread> kLoopThread;
+  // Protect above thread pointer
+  std::mutex thread_lock;
+
   int upper, lower;
+  // Protect above variables
+  std::mutex config_lock;
+
   // Worker function
   void startLoop(bool withrestart);
   // Starter function
   void createLoopThread(bool restart);
+
+  // Thread controller
   std::atomic_bool kRun;
-  std::mutex config_lock;
 
   std::condition_variable cv;
   // Used by above condition_variable
