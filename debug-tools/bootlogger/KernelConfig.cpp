@@ -37,9 +37,7 @@ static int ReadConfigGz(std::string &out) {
   return 0;
 }
 
-static bool parseOneConfigLine(
-    const std::string &line,
-    std::unordered_map<std::string, ConfigValue> &outvec) {
+static bool parseOneConfigLine(const std::string &line, KernelConfig_t &outvec) {
   static const std::regex kDisabledConfig(R"(^#\sCONFIG_\w+ is not set$)");
   static const std::regex kEnabledConfig(R"(^CONFIG_\w+=(y|m|(")?(.+)?(")?)$)");
   static const auto flags = std::regex_constants::format_sed;
