@@ -207,9 +207,9 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
   if (kRun.load())
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair<int>{lower_ < 0 ? -1 : lower_, upper_};
+  SetProperty(kSmartChargeConfigProp, pair.toString());
   {
     std::unique_lock<std::mutex> _(config_lock);
-    SetProperty(kSmartChargeConfigProp, pair.toString());
     lower = lower_ < 0 ? -1 : lower_;
     upper = upper_;
   }
@@ -218,19 +218,19 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
 }
 
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
-  ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__,
-        upper, lower, enable, restart, kRun.load());
-  if (!verifyConfig(lower, upper))
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  if (lower == -1 && restart)
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  if (kRun.load() == enable)
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   auto pair = ConfigPair<bool>{enable, restart};
   {
     std::unique_lock<std::mutex> _(config_lock);
-    SetProperty(kSmartChargeEnabledProp, pair.toString());
+    ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__,
+          upper, lower, enable, restart, kRun.load());
+    if (!verifyConfig(lower, upper))
+      return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+    if (lower == -1 && restart)
+      return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   }
+  if (kRun.load() == enable)
+    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+  SetProperty(kSmartChargeEnabledProp, pair.toString());
   if (enable) {
     kRun.store(true);
     if (kLoopThread) {
