@@ -78,7 +78,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         mConfig = if (mRestartEnableSwitch.isChecked) {Config.STOP_RESTART} else {Config.STOP}
 
         mMainSwitch.addOnSwitchChangeListener(this)
-        mRestartEnableSwitch.setOnPreferenceChangeListener { p, new ->
+        mRestartEnableSwitch.setOnPreferenceChangeListener { _, new ->
             mConfig = if (new as Boolean) {
                 Config.STOP_RESTART
             } else {
