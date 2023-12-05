@@ -40,6 +40,7 @@
 
 #include "LoggerInternal.h"
 
+using android::base::GetProperty;
 using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
 using android::base::WriteStringToFile;
@@ -315,6 +316,7 @@ int main(int argc, const char** argv) {
   std::atomic_bool run;
   std::error_code ec;
   KernelConfig_t kConfig;
+  bool system_log = false;
   int rc;
 
   if (argc != 2) {
@@ -329,6 +331,10 @@ int main(int argc, const char** argv) {
   if (kLogDir.back() != '/')
      kLogDir += '/';
 
+  if (GetProperty("sys.boot_completed", "") == "1") {
+     ALOGI("Running in system log mode");
+     system_log = true;
+  }
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
   auto kAvcFilter = std::make_shared<AvcFilterContext>();
@@ -374,12 +380,15 @@ int main(int argc, const char** argv) {
   kLogcatCtx.registerLogFilter(kLibcPropsFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
-  WaitForProperty("sys.boot_completed", "1");
-  recordBootTime();
+  if (system_log) {
+    WaitForProperty("persist.ext.logdump.enabled", "false");
+  } else {
+    WaitForProperty("sys.boot_completed", "1");
+    recordBootTime();
 
-  // Delay a bit to finish
-  std::this_thread::sleep_for(3s);
-
+    // Delay a bit to finish
+    std::this_thread::sleep_for(3s);
+  }
   run = false;
   for (auto &i : threads)
     i.join();

@@ -1,4 +1,10 @@
-service logdump /system/system_ext/bin/logger /data/debug/
+service logdump /system/system_ext/bin/logger /data/debug/boot
+    user root
+    group system
+    oneshot
+    disabled
+
+service logdump-rt /system/system_ext/bin/logger /data/debug/system
     user root
     group system
     oneshot
@@ -6,4 +12,9 @@ service logdump /system/system_ext/bin/logger /data/debug/
 
 on post-fs-data
     mkdir /data/debug 0755 root system encryption=None
+    mkdir /data/debug/boot 0755 root system
+    mkdir /data/debug/system 0755 root system
     start logdump
+
+on property:sys.boot_completed=1 && property:persist.ext.logdump.enabled=true
+    start logdump-rt
