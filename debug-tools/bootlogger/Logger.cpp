@@ -49,7 +49,7 @@ using std::chrono_literals::operator""s; // NOLINT (misc-unused-using-decls)
 namespace fs = std::filesystem;
 
 // TODO is there anything better than global variable?
-static std::string kLogDir;
+static fs::path kLogDir;
 
 // Base context for outputs with file
 struct OutputContext {
@@ -61,7 +61,8 @@ struct OutputContext {
 
   // Takes one argument 'filename' without file extension
   OutputContext(const std::string &filename) : kFileName(filename) {
-    kFilePath = kLogDir + kFileName + ".txt";
+    auto localLogDir = kLogDir; // Copy-construct
+    kFilePath = localLogDir.append(kFileName + ".txt").string();
   }
 
   // Takes two arguments 'filename' and is_filter
@@ -315,6 +316,7 @@ int main(int argc, const char** argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
   std::error_code ec;
+  std::string kLogRoot;
   KernelConfig_t kConfig;
   bool system_log = false;
   int rc;
@@ -323,18 +325,22 @@ int main(int argc, const char** argv) {
     fprintf(stderr, "Usage: %s [log directory]\n", argv[0]);
     return EXIT_FAILURE;
   }
-  kLogDir = argv[1];
-  if (kLogDir.empty()) {
+  kLogRoot = argv[1];
+  if (kLogRoot.empty()) {
     fprintf(stderr, "%s: Invaild empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
-  if (kLogDir.back() != '/')
-     kLogDir += '/';
+  kLogDir = fs::path(kLogRoot);
 
   if (GetProperty("sys.boot_completed", "") == "1") {
      ALOGI("Running in system log mode");
      system_log = true;
   }
+  if (system_log)
+     kLogDir.append("system");
+  else
+     kLogDir.append("boot");
+
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
   auto kAvcFilter = std::make_shared<AvcFilterContext>();
@@ -342,22 +348,26 @@ int main(int argc, const char** argv) {
 
   ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
 
-  for (auto const& ent : fs::directory_iterator(kLogDir, ec)) {
-    fs::remove(ent, ec);
+  for (auto const& ent : fs::directory_iterator(kLogRoot, ec)) {
+    if (fs::is_directory(ent, ec))
+      fs::remove_all(ent, ec);
+    else
+      fs::remove(ent, ec);
     if (ec) {
-      ALOGW("Cannot remove '%s'", ent.path().string().c_str());
+      ALOGW("Cannot remove '%s': %s", ent.path().string().c_str(), ec.message().c_str());
       ec.clear();
     }
   }
   // If error_code is set here, it means from the directory_iterator,
   // as error code is always cleared if failure inside the loop.
   if (ec) {
-    ALOGE("Failed to remove files in log directory");
+    ALOGE("Failed to remove files in log directory: %s", ec.message().c_str());
     ec.clear();
   } else {
     ALOGI("Cleared log directory files");
   }
 
+  // Determine audit support
   rc = ReadKernelConfig(kConfig);
   if (rc == 0) {
     if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
@@ -368,6 +378,12 @@ int main(int argc, const char** argv) {
     }
   }
 
+  // Create log dir again
+  fs::create_directory(kLogDir, ec);
+  if (ec) {
+     ALOGE("Failed to create directory '%s': %s", kLogDir.c_str(), ec.message().c_str());
+     return EXIT_FAILURE;
+  }
   run = true;
 
   // If this prop is true, logd logs kernel message to logcat
