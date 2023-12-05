@@ -305,7 +305,7 @@ int main(int argc, const char** argv) {
   auto kAvcFilter = std::make_shared<AvcFilterContext>();
   auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
 
-  ALOGI("Logger starting...");
+  ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
 
   for (auto const& ent : fs::directory_iterator(kLogDir, ec)) {
     fs::remove(ent, ec);
