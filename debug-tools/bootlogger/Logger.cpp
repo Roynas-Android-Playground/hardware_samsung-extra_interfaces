@@ -318,12 +318,12 @@ int main(int argc, const char** argv) {
   int rc;
 
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s [log directory]", argv[0]);
+    fprintf(stderr, "Usage: %s [log directory]\n", argv[0]);
     return EXIT_FAILURE;
   }
   kLogDir = argv[1];
   if (kLogDir.empty()) {
-    fprintf(stderr, "Invaild empty string for log directory");
+    fprintf(stderr, "%s: Invaild empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
   if (kLogDir.back() != '/')
