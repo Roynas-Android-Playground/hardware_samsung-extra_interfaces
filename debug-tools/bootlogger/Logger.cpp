@@ -14,11 +14,14 @@
  * limitations under the License.
  */
 
+#include <android-base/file.h>
 #include <android-base/properties.h>
+#include <chrono>
 #include <cstdlib>
 #include <errno.h>
 #include <fcntl.h>
 #include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <unistd.h>
 
 #include <atomic>
@@ -39,6 +42,9 @@
 
 using android::base::GetBoolProperty;
 using android::base::WaitForProperty;
+using android::base::WriteStringToFile;
+using std::chrono_literals::operator""s; // NOLINT (misc-unused-using-decls)
+
 namespace fs = std::filesystem;
 
 // TODO is there anything better than global variable?
@@ -287,6 +293,23 @@ struct libcPropFilterContext : LogFilterContext {
   ~libcPropFilterContext() override = default;
 };
 
+using std::chrono::duration_cast;
+
+static void recordBootTime() {
+  struct sysinfo x;
+  std::chrono::seconds uptime;
+  std::string logbuf;
+
+  if ((sysinfo(&x) == 0)) {
+     uptime = std::chrono::seconds(x.uptime);
+     logbuf = LOG_TAG ": Boot completed in ";
+     auto mins = duration_cast<std::chrono::minutes>(uptime);
+     if (mins.count() > 0)
+       logbuf += std::to_string(mins.count()) + 'm' + ' ';
+     logbuf += std::to_string((uptime - duration_cast<std::chrono::seconds>(mins)).count()) + 's';
+     WriteStringToFile(logbuf, "/dev/kmsg");
+  }
+}
 int main(int argc, const char** argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
@@ -346,6 +369,11 @@ int main(int argc, const char** argv) {
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
   WaitForProperty("sys.boot_completed", "1");
+  recordBootTime();
+
+  // Delay a bit to finish
+  std::this_thread::sleep_for(3s);
+
   run = false;
   for (auto &i : threads)
     i.join();
