@@ -322,6 +322,12 @@ int main(int argc, const char** argv) {
     return EXIT_FAILURE;
   }
   kLogDir = argv[1];
+  if (kLogDir.empty()) {
+    fprintf(stderr, "Invaild empty string for log directory");
+    return EXIT_FAILURE;
+  }
+  if (kLogDir.back() != '/')
+     kLogDir += '/';
 
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;

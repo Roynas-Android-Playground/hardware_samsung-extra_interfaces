@@ -1,4 +1,4 @@
-service logdump /system/system_ext/bin/logger /data/debug
+service logdump /system/system_ext/bin/logger /data/debug/
     user root
     group system
     oneshot
