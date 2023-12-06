@@ -180,10 +180,9 @@ struct LoggerContext : OutputContext {
    * @param run Pointer to run/stop control variable
    */
   void startLogger(std::atomic_bool *run) {
-    char buf[BUF_SIZE];
+    char buf[512] = {0};
     auto fp = openSource();
     if (fp) {
-      memset(buf, 0, BUF_SIZE);
       if (openOutput()) {
         for (auto &f : filters) {
           f.second->openOutput();
@@ -203,6 +202,7 @@ struct LoggerContext : OutputContext {
             while (std::getline(ss, line)) {
               for (auto &f : filters) {
                 std::string fline = line;
+                fline.shrink_to_fit();
                 if (f.first->filter(fline))
                   f.second->writeToOutput(fline);
               }
