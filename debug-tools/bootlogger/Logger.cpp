@@ -361,7 +361,7 @@ int main(int argc, const char** argv) {
 
   ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
 
-  for (auto const& ent : fs::directory_iterator(kLogRoot, ec)) {
+  for (auto const& ent : fs::directory_iterator(system_log ? kLogDir : fs::path(kLogRoot), ec)) {
     if (fs::is_directory(ent, ec))
       fs::remove_all(ent, ec);
     else
