@@ -157,7 +157,7 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
   ret &= pit != attributes.end();
   // If still vaild
   if (ret) {
-    auto permissive = pit->second[0];
+    auto permissive = pit->second.empty() ? '\0' : pit->second[0];
     ret &= (permissive == '0' || permissive == '1');
     if (ret) {
       ctx.permissive = permissive - '0';
