@@ -27,6 +27,9 @@ struct security_class_mapping secclass_map_ext[] {
     { "hwservice_manager",
 	  { COMMON_ANDROID_IPC_PERMS }
     },
+    { "property_service",
+	  { "set" }
+    },
 };
 
 enum class MapVerifyResult {
