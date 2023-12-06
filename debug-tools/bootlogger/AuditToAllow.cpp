@@ -182,10 +182,22 @@ bool writeAllowRules(const AvcContext &ctx, std::string &out) {
 
   if (!ctx.stale) {
     ss << "allow " << TrimSEContext(ctx.scontext) << ' '
-       << TrimSEContext(ctx.tcontext) << ':' << ctx.tclass << " { ";
-    for (const auto &op : ctx.operation)
-      ss << op << ' ';
-    ss << "};" << std::endl;
+       << TrimSEContext(ctx.tcontext) << ':' << ctx.tclass << ' ';
+    switch (ctx.operation.size()) {
+      case 0: {
+        return false;
+      }
+      case 1: {
+        ss << ctx.operation.front();
+      } break;
+      default: {
+        ss << '{' << ' ';
+        for (const auto &op : ctx.operation)
+          ss << op << ' ';
+        ss << '}';
+      } break;
+    };
+    ss << ';' << std::endl;
     out.append(ss.str());
     return true;
   }
