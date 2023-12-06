@@ -357,6 +357,7 @@ int main(int argc, const char** argv) {
   auto kAvcCtx = std::make_shared<std::vector<AvcContext>>();
   auto kAvcFilter = std::make_shared<AvcFilterContext>(kAvcCtx, lock);
   auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
+  bool ever_removed = false;
 
   ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
 
@@ -368,11 +369,13 @@ int main(int argc, const char** argv) {
     if (ec) {
       ALOGW("Cannot remove '%s': %s", ent.path().string().c_str(), ec.message().c_str());
       ec.clear();
+    } else {
+      ever_removed = true;
     }
   }
   // If error_code is set here, it means from the directory_iterator,
   // as error code is always cleared if failure inside the loop.
-  if (ec) {
+  if (ec || !ever_removed) {
     ALOGE("Failed to remove files in log directory: %s", ec.message().c_str());
     ec.clear();
   } else {
