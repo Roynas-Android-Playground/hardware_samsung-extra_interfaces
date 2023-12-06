@@ -428,6 +428,12 @@ int main(int argc, const char** argv) {
   if (kAvcCtx) {
     std::vector<std::string> allowrules;
     std::stringstream iss;
+    for (auto& e1 : *kAvcCtx) {
+      for (auto& e2 : *kAvcCtx) {
+        if (&e1 == &e2) continue;
+        e1 += e2;
+      }
+    }
     for (const auto& e : *kAvcCtx) {
       std::string line;
       writeAllowRules(e, line);
