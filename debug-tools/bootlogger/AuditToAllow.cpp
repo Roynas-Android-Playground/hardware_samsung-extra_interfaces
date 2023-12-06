@@ -157,13 +157,13 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
   ret &= pit != attributes.end();
   // If still vaild
   if (ret) {
-    auto permissive = pit->second;
-    ret &= (permissive == "0" || permissive == "1");
+    auto permissive = pit->second[0];
+    ret &= (permissive == '0' || permissive == '1');
     if (ret) {
-      ctx.permissive = stoi(permissive);
+      ctx.permissive = permissive - '0';
       attributes.erase(pit);
     } else {
-      ALOGE("Invaild permissive status: '%s'", pit->second.c_str());
+      ALOGE("Invaild permissive status: '%c'", permissive);
     }
   }
   if (!ctx.tclass.empty())
