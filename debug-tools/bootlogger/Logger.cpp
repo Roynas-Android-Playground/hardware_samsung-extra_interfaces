@@ -423,10 +423,20 @@ int main(int argc, const char** argv) {
     i.join();
 
   if (kAvcCtx) {
-    std::string allowrules;
-    for (const auto& e : *kAvcCtx)
-      writeAllowRules(e, allowrules);
-    WriteStringToFile(allowrules, kLogDir.append("rules.autogen.te"));
+    std::vector<std::string> allowrules;
+    std::stringstream iss;
+    for (const auto& e : *kAvcCtx) {
+      std::string line;
+      writeAllowRules(e, line);
+      allowrules.emplace_back(line);
+    }
+    std::sort(allowrules.begin(), allowrules.end());
+    allowrules.erase(std::unique(allowrules.begin(), allowrules.end()), allowrules.end());
+    for (const auto& l : allowrules)
+      iss << l;
+    auto rules = kLogDir;
+    rules.append("rules.autogen.te");
+    WriteStringToFile(iss.str(), rules);
   }
   return 0;
 }
