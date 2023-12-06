@@ -256,10 +256,19 @@ struct AvcFilterContext : LogFilterContext {
   bool filter(const std::string &line) const override {
     // Matches "avc: denied { ioctl } for comm=..." for example
     const static auto kAvcMessageRegEX =
-        std::regex(R"(avc:\s+denied\s+\{\s\w+\s\})");
-    return std::regex_search(line, kAvcMessageRegEX, kRegexMatchflags);
+        std::regex(R"(avc:\s+denied\s+\{\s\w+\s\}\sfor\s)");
+    bool match = std::regex_search(line, kAvcMessageRegEX, kRegexMatchflags);
+    if (match && _ctx) {
+      const std::lock_guard<std::mutex> _(_lock);
+      parseOneAvcContext(line, *_ctx);
+    }
+    return match;
   }
-  AvcFilterContext() : LogFilterContext("avc") {}
+  std::shared_ptr<AvcContexts> _ctx;
+  std::mutex& _lock;
+  AvcFilterContext(std::shared_ptr<AvcContexts> ctx, std::mutex& lock) :
+    LogFilterContext("avc"), _ctx(ctx), _lock(lock) {}
+  AvcFilterContext() = delete;
   ~AvcFilterContext() override = default;
 };
 
@@ -312,6 +321,7 @@ static void recordBootTime() {
      WriteStringToFile(logbuf, "/dev/kmsg");
   }
 }
+
 int main(int argc, const char** argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
@@ -320,6 +330,7 @@ int main(int argc, const char** argv) {
   KernelConfig_t kConfig;
   bool system_log = false;
   int rc;
+  std::mutex lock;
 
   if (argc != 2) {
     fprintf(stderr, "Usage: %s [log directory]\n", argv[0]);
@@ -343,7 +354,8 @@ int main(int argc, const char** argv) {
 
   DmesgContext kDmesgCtx;
   LogcatContext kLogcatCtx;
-  auto kAvcFilter = std::make_shared<AvcFilterContext>();
+  auto kAvcCtx = std::make_shared<std::vector<AvcContext>>();
+  auto kAvcFilter = std::make_shared<AvcFilterContext>(kAvcCtx, lock);
   auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
 
   ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
@@ -375,6 +387,7 @@ int main(int argc, const char** argv) {
     } else {
       ALOGI("Kernel configuration does not have CONFIG_AUDIT=y, disabling avc filters.");
       kAvcFilter.reset();
+      kAvcCtx.reset();
     }
   }
 
@@ -408,5 +421,12 @@ int main(int argc, const char** argv) {
   run = false;
   for (auto &i : threads)
     i.join();
+
+  if (kAvcCtx) {
+    std::string allowrules;
+    for (const auto& e : *kAvcCtx)
+      writeAllowRules(e, allowrules);
+    WriteStringToFile(allowrules, kLogDir.append("rules.autogen.te"));
+  }
   return 0;
 }

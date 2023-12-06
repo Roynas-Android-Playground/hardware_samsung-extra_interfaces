@@ -17,10 +17,12 @@
 cc_binary {
     name: "logger",
     srcs: [
+        "AuditToAllow.cpp",
         "Logger.cpp",
-        "KernelConfig.cpp"
+        "KernelConfig.cpp",
     ],
     init_rc: ["logger.rc"],
+    cflags: ["-Wno-missing-field-initializers"],
     whole_static_libs: [
         "libbase",
         "libc++fs",
