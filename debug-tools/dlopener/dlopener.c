@@ -1,14 +1,15 @@
 #include <dlfcn.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <string.h>
+#include <sys/stat.h>
 
 int main(int argc, char *argv[]) {
   const char *path;
+  struct stat buf;
   void *handle = NULL;
-  int fd, ret = EXIT_FAILURE;
+  int ret = EXIT_FAILURE;
 
   if (argc <= 1) {
     printf("Please specify a module to load!\n");
@@ -17,14 +18,13 @@ int main(int argc, char *argv[]) {
 
   path = argv[1];
 
-  // man7: EISDIR when pathname refers to a directory and the access requested
-  // involved writing (that is, O_WRONLY or O_RDWR is set).
-  fd = open(path, O_WRONLY);
-  if (fd < 0 && errno == EISDIR) {
-    printf("load: %s: is a directory\n", path);
+  ret = stat(path, &buf);
+  if (ret < 0) {
+    printf("load %s: stat: %s\n", path, strerror(errno));
     return ret;
-  } else {
-    close(fd);
+  } else if (!S_ISREG(buf.st_mode)) {
+    printf("load %s: Not a regular file\n", path);
+    return ret;
   }
 
   handle = dlopen(path, RTLD_NOW);
