@@ -258,6 +258,7 @@ struct AvcFilterContext : LogFilterContext {
     const static auto kAvcMessageRegEX =
         std::regex(R"(avc:\s+denied\s+\{\s\w+\s\}\sfor\s)");
     bool match = std::regex_search(line, kAvcMessageRegEX, kRegexMatchflags);
+    match &= line.find("untrusted_app") == std::string::npos;
     if (match && _ctx) {
       const std::lock_guard<std::mutex> _(_lock);
       parseOneAvcContext(line, *_ctx);
