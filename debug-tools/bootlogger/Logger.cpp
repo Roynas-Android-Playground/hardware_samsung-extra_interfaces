@@ -48,9 +48,6 @@ using std::chrono_literals::operator""s; // NOLINT (misc-unused-using-decls)
 
 namespace fs = std::filesystem;
 
-// TODO is there anything better than global variable?
-static fs::path kLogDir;
-
 // Base context for outputs with file
 struct OutputContext {
   // File path (absolute)  of this context.
@@ -60,14 +57,13 @@ struct OutputContext {
   std::string kFileName;
 
   // Takes one argument 'filename' without file extension
-  OutputContext(const std::string &filename) : kFileName(filename) {
-    auto localLogDir = kLogDir; // Copy-construct
-    kFilePath = localLogDir.append(kFileName + ".txt").string();
+  OutputContext(fs::path logDir, const std::string &filename) : kFileName(filename) {
+    kFilePath = logDir.append(kFileName + ".txt").string();
   }
 
   // Takes two arguments 'filename' and is_filter
-  OutputContext(const std::string &filename, const bool isFilter)
-      : OutputContext(filename) {
+  OutputContext(const fs::path logDir, const std::string &filename, const bool isFilter)
+      : OutputContext(logDir, filename) {
     is_filter = isFilter;
   }
 
@@ -103,9 +99,9 @@ struct OutputContext {
   operator bool() const { return fd >= 0; }
 
   /**
-   * To be called on ~OutputContext Sub-classes
+   * Cleanup
    */
-  void cleanupOutputCtx() {
+  ~OutputContext() {
     struct stat buf {};
     int rc = fstat(fd, &buf);
     if (rc == 0 && buf.st_size == 0) {
@@ -115,8 +111,6 @@ struct OutputContext {
     close(fd);
     fd = -1;
   }
-
-  virtual ~OutputContext() {}
 
 private:
   int fd = -1;
@@ -129,7 +123,6 @@ private:
  */
 struct LogFilterContext {
   // Function to be invoked to filter
-  // Note: The line passed to this function is modifiable.
   virtual bool filter(const std::string &line) const = 0;
   // Filter name, must be a vaild file name itself.
   std::string kFilterName;
@@ -150,27 +143,25 @@ struct LoggerContext : OutputContext {
    *
    * @return FILE* handle
    */
-  virtual FILE *openSource(void) = 0;
+  FILE *(*openSource)(void) = nullptr;
 
   /**
    * Closes log file stream handle and does cleanup
    *
    * @param fp The file stream to close and cleanup. NonNull.
    */
-  virtual void closeSource(FILE *fp) = 0;
+  void (*closeSource)(FILE *fp) = nullptr;
 
   /**
    * Register a LogFilterContext to this stream.
    *
    * @param ctx The context to register
    */
-  void registerLogFilter(std::shared_ptr<LogFilterContext> ctx) {
+  void registerLogFilter(const fs::path logDir, std::shared_ptr<LogFilterContext> ctx) {
     if (ctx) {
       ALOGD("%s: registered filter '%s' to '%s' logger", __func__,
             ctx->kFilterName.c_str(), name.c_str());
-      filters.emplace(
-          ctx, std::make_unique<OutputContext>(ctx->kFilterName + '.' + name,
-                                               /*isFilter*/ true));
+      filters.emplace(ctx, OutputContext(logDir, ctx->kFilterName + '.' + name,/*isFilter*/ true));
     }
   }
 
@@ -185,11 +176,11 @@ struct LoggerContext : OutputContext {
     if (fp) {
       if (openOutput()) {
         for (auto &f : filters) {
-          f.second->openOutput();
+          f.second.openOutput();
         }
         // Erase failed-to-open contexts
         for (auto it = filters.begin(), last = filters.end(); it != last;) {
-          if (!it->second.get())
+          if (!it->second)
             it = filters.erase(it);
           else
             ++it;
@@ -204,14 +195,11 @@ struct LoggerContext : OutputContext {
                 std::string fline = line;
                 fline.shrink_to_fit();
                 if (f.first->filter(fline))
-                  f.second->writeToOutput(fline);
+                  f.second.writeToOutput(fline);
               }
               writeToOutput(line);
             }
           }
-        }
-        for (auto &f : filters) {
-          f.second->cleanupOutputCtx();
         }
         // ofstream will auto close
       } else {
@@ -223,33 +211,34 @@ struct LoggerContext : OutputContext {
       PLOGE("[Context %s] Opening source", name.c_str());
     }
   }
-  LoggerContext(const std::string &fname) : OutputContext(fname), name(fname) {
-    ALOGD("%s: Logger context '%s' created", __func__, fname.c_str());
-  }
-  virtual ~LoggerContext(){};
 
-private:
+  LoggerContext(decltype(openSource) op, decltype(closeSource) cl, const fs::path logDir,
+                const std::string& name)
+                : OutputContext(logDir, name), openSource(op), closeSource(cl), name(name) {
+    ALOGD("%s: Logger context '%s' created", __func__, name.c_str());
+  }
+
+ private:
   std::string name;
-  std::unordered_map<std::shared_ptr<LogFilterContext>,
-                     std::unique_ptr<OutputContext>>
+  std::unordered_map<std::shared_ptr<LogFilterContext>, OutputContext>
       filters;
 };
 
 // DMESG
-struct DmesgContext : LoggerContext {
-  FILE *openSource(void) override { return fopen("/proc/kmsg", "r"); }
-  void closeSource(FILE *fp) override { fclose(fp); }
-  DmesgContext() : LoggerContext("kmsg") {}
-  ~DmesgContext() override { cleanupOutputCtx(); }
-};
+static FILE* DmesgContext_openSource() {
+  return fopen("/proc/kmsg", "r");
+}
+static void DmesgContext_closeSource(FILE *fp) {
+  fclose(fp);
+}
 
 // Logcat
-struct LogcatContext : LoggerContext {
-  FILE *openSource(void) override { return popen("/system/bin/logcat", "r"); }
-  void closeSource(FILE *fp) override { pclose(fp); }
-  LogcatContext() : LoggerContext("logcat") {}
-  ~LogcatContext() override { cleanupOutputCtx(); }
-};
+static FILE* LogcatContext_openSource() {
+  return popen("/system/bin/logcat", "r");
+}
+static void LogcatContext_closeSource(FILE *fp) {
+  fclose(fp);
+}
 
 // Filters - AVC
 struct AvcFilterContext : LogFilterContext {
@@ -342,7 +331,7 @@ int main(int argc, const char** argv) {
     fprintf(stderr, "%s: Invaild empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
-  kLogDir = fs::path(kLogRoot);
+  auto kLogDir = fs::path(kLogRoot);
 
   if (GetProperty("sys.boot_completed", "") == "1") {
      ALOGI("Running in system log mode");
@@ -353,8 +342,18 @@ int main(int argc, const char** argv) {
   else
      kLogDir.append("boot");
 
-  DmesgContext kDmesgCtx;
-  LogcatContext kLogcatCtx;
+  LoggerContext kDmesgCtx = {
+    DmesgContext_openSource,
+    DmesgContext_closeSource,
+    kLogDir,
+    "dmesg"
+  };
+  LoggerContext kLogcatCtx = {
+    LogcatContext_openSource,
+    LogcatContext_closeSource,
+    kLogDir,
+    "logcat"
+  };
   auto kAvcCtx = std::make_shared<std::vector<AvcContext>>();
   auto kAvcFilter = std::make_shared<AvcFilterContext>(kAvcCtx, lock);
   auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
@@ -406,11 +405,11 @@ int main(int argc, const char** argv) {
   // If this prop is true, logd logs kernel message to logcat
   // Don't make duplicate (Also it will race against kernel logs)
   if (!GetBoolProperty("ro.logd.kernel", false)) {
-    kDmesgCtx.registerLogFilter(kAvcFilter);
+    kDmesgCtx.registerLogFilter(kLogDir, kAvcFilter);
     threads.emplace_back(std::thread([&] { kDmesgCtx.startLogger(&run); }));
   }
-  kLogcatCtx.registerLogFilter(kAvcFilter);
-  kLogcatCtx.registerLogFilter(kLibcPropsFilter);
+  kLogcatCtx.registerLogFilter(kLogDir, kAvcFilter);
+  kLogcatCtx.registerLogFilter(kLogDir, kLibcPropsFilter);
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
   if (system_log) {
