@@ -440,8 +440,7 @@ int main(int argc, const char** argv) {
       writeAllowRules(e, line);
       allowrules.emplace_back(line);
     }
-    std::sort(allowrules.begin(), allowrules.end());
-    allowrules.erase(std::unique(allowrules.begin(), allowrules.end()), allowrules.end());
+    eraseDuplicates(allowrules);
     for (const auto& l : allowrules)
       iss << l;
     auto rules = kLogDir;

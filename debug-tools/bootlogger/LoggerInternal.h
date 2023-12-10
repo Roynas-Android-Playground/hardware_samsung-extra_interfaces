@@ -50,6 +50,13 @@ using AttributeMap = std::map<std::string, std::string>;
 using OperationVec = std::vector<std::string>;
 using AvcContexts = std::vector<AvcContext>;
 
+template <typename T>
+void eraseDuplicates(std::vector<T> &vec)
+{
+  std::sort(vec.begin(), vec.end());
+  vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+}
+
 struct AvcContext {
   bool granted;                       // granted or denied?
   std::vector<std::string> operation; // find, ioctl, open...
@@ -70,9 +77,7 @@ struct AvcContext {
         other.stale = true;
         operation.insert(operation.end(), other.operation.begin(),
                          other.operation.end());
-        std::sort(operation.begin(), operation.end());
-        operation.erase(std::unique(operation.begin(), operation.end()),
-                        operation.end());
+        eraseDuplicates(operation);
       }
     }
     return *this;
