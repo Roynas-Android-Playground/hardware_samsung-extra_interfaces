@@ -234,7 +234,7 @@ static void DmesgContext_closeSource(FILE *fp) {
 
 // Logcat
 static FILE* LogcatContext_openSource() {
-  return popen("/system/bin/logcat", "r");
+  return popen("/system/bin/logcat -b all", "r");
 }
 static void LogcatContext_closeSource(FILE *fp) {
   fclose(fp);
