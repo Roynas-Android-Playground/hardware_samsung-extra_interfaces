@@ -43,9 +43,10 @@ int main(int argc, char *argv[]) {
 
   handle = dlopen(path, RTLD_NOW);
   if (handle == NULL) {
-    const char *err_str = dlerror();
-    DLOPENER_PRINTF("Failed:\n-> %s", err_str ? err_str : "unknown");
+    const char *err_str = dlerror() ?: "unknown";
+    DLOPENER_PRINTF("Failed:\n-> %s", err_str);
   } else {
+    dlclose(handle);
     DLOPENER_PRINTF("Succeeded");
     ret = EXIT_SUCCESS;
   }
