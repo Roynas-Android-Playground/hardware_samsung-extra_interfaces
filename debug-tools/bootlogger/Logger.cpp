@@ -48,6 +48,8 @@ using std::chrono_literals::operator""s; // NOLINT (misc-unused-using-decls)
 
 namespace fs = std::filesystem;
 
+#define MAKE_LOGGER_PROP(prop) "persist.ext.logdump." prop
+
 // Base context for outputs with file
 struct OutputContext {
   // File path (absolute)  of this context.
@@ -233,8 +235,17 @@ static void DmesgContext_closeSource(FILE *fp) {
 }
 
 // Logcat
+#define LOGCAT_EXE "/system/bin/logcat"
 static FILE* LogcatContext_openSource() {
-  return popen("/system/bin/logcat -b all", "r");
+  static const auto kPropBuffer = GetProperty(MAKE_LOGGER_PROP("logcat_buffer"), "");
+  if (kPropBuffer.empty())
+    return popen(LOGCAT_EXE, "r");
+  else {
+    static char buffer[sizeof(LOGCAT_EXE) * 5];
+    std::snprintf(buffer, sizeof(buffer) - 1, LOGCAT_EXE " -b %s || " LOGCAT_EXE, kPropBuffer.c_str());
+    buffer[sizeof(buffer) - 1] = '\0';
+    return popen(buffer, "r");
+  }
 }
 static void LogcatContext_closeSource(FILE *fp) {
   fclose(fp);
@@ -413,7 +424,7 @@ int main(int argc, const char** argv) {
   threads.emplace_back(std::thread([&] { kLogcatCtx.startLogger(&run); }));
 
   if (system_log) {
-    WaitForProperty("persist.ext.logdump.enabled", "false");
+    WaitForProperty(MAKE_LOGGER_PROP("enabled"), "false");
   } else {
     WaitForProperty("sys.boot_completed", "1");
     recordBootTime();
