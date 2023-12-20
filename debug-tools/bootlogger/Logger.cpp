@@ -344,7 +344,7 @@ int main(int argc, const char** argv) {
   }
   auto kLogDir = fs::path(kLogRoot);
 
-  if (GetProperty("sys.boot_completed", "") == "1") {
+  if (getenv("LOGGER_MODE_SYSTEM") != NULL) {
      ALOGI("Running in system log mode");
      system_log = true;
   }

@@ -16,6 +16,5 @@ allow logger logd:unix_stream_socket connectto;
 allow logger config_gz:file r_file_perms;
 allow logger kmsg_device:chr_file w_file_perms;
 
-get_prop(logger, boot_status_prop)
 get_prop(logger, logd_prop)
 get_prop(logger, ext_logger_prop)
