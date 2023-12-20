@@ -5,6 +5,7 @@
  */
 
 #include "SmartCharge.h"
+#include "modules/battery.h"
 
 #include <SafeStoi.h>
 #include <android-base/file.h>
@@ -12,6 +13,7 @@
 #include <log/log.h>
 
 #include <chrono>
+#include <dlfcn.h>
 #include <functional>
 #include <sstream>
 #include <type_traits>
@@ -32,6 +34,7 @@ using namespace std::chrono_literals;
 
 static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
 static const char kSmartChargeEnabledProp[] = "persist.ext.smartcharge.enabled";
+static const char kSmartChargeOverrideProp[] = "ro.hardware.battery";
 static const char kComma = ',';
 static const char kChargeCtlSysfs[] =
     "/sys/class/power_supply/battery/batt_slate_mode";
@@ -97,19 +100,42 @@ bool getAndParse(const char *prop, ConfigPair<U> *pair) {
 
 const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
 
-class BatteryHelper {
-  static int _readSysfs(const char *sysfs) {
-    std::string data;
-    ReadFileToString(sysfs, &data);
-    return stoi_safe(data);
-  }
+// Default impls
+static void setChargableDef(bool enable) {
+  WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
+}
+static int getPercentDef(void) {
+  std::string data;
+  ReadFileToString(kBatteryPercentSysfs, &data);
+  return stoi_safe(data);
+}
 
-public:
-  static void setChargable(bool enable) {
-    WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
-  }
-  static int getPercent(void) { return _readSysfs(kBatteryPercentSysfs); }
-};
+// Helper macros
+
+//    bit        func       def_func       name
+// SPECIFIC_* fnvariable  def_func_hdl  dlsym_name
+#define TEST_AND_ASSIGN(bit, func, def_func, name)                             \
+  do {                                                                         \
+    if (mask & bit) {                                                          \
+      func = (decltype(&def_func))dlsym(handle, name);                         \
+      if (func) {                                                              \
+        ALOGD("" #func " using loaded impl");                                  \
+        isHandleUsed = true;                                                   \
+      } else {                                                                 \
+        ALOGW("Mask specified " #bit " but sym " name "NULL");                 \
+      }                                                                        \
+    }                                                                          \
+  } while (0);
+
+//    func      def_func
+// fnvariable  defaultfunc
+#define TEST_OR_DEFAULT(func, def_func)                                        \
+  do {                                                                         \
+    if (!func) {                                                               \
+      func = def_func;                                                         \
+      ALOGD("" #func " using default impl");                                   \
+    }                                                                          \
+  } while (0);
 
 SmartCharge::SmartCharge(void) {
   {
@@ -126,20 +152,43 @@ SmartCharge::SmartCharge(void) {
       return;
     }
   }
-  {
-    ConfigPair<bool> ret{};
-    if (getAndParse(kSmartChargeEnabledProp, &ret)) {
-      if (ret.first) {
-        ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
-        kRun.store(true);
-        createLoopThread(ret.second);
-      } else
-        ALOGD("%s: Not starting loop", __func__);
+  std::string prop = GetProperty(kSmartChargeOverrideProp, "");
+  ConfigPair<bool> ret{};
+  if (!prop.empty()) {
+    ALOGI("%s: Try dlopen '%s'", __func__, prop.c_str());
+    handle = dlopen(prop.c_str(), RTLD_NOW);
+    if (handle) {
+      bool isHandleUsed = false;
+      auto maskPtr = (int *)dlsym(handle, "availableMask");
+      if (maskPtr) {
+        int mask = *maskPtr;
+        if ((mask & (SPECIFIC_SETCHARGE | SPECIFIC_GETPERCENT)) == mask) {
+          TEST_AND_ASSIGN(SPECIFIC_SETCHARGE, setChargableFunc, setChargableDef, "setChargable");
+          TEST_AND_ASSIGN(SPECIFIC_GETPERCENT, getPercentFunc, getPercentDef, "getPercent");
+        } else {
+          ALOGE("%s: Invalid mask: %d", __func__, mask);
+        }
+        if (!isHandleUsed) {
+          // Unused handle, close it
+          dlclose(handle);
+        }
+      }
     } else {
-      ALOGE("%s: Enabled prop value invaild, resetting to valid one...",
-            __func__);
-      SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
+      ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
     }
+  }
+  TEST_OR_DEFAULT(setChargableFunc, setChargableDef);
+  TEST_OR_DEFAULT(getPercentFunc, getPercentDef);
+  if (getAndParse(kSmartChargeEnabledProp, &ret)) {
+    if (ret.first) {
+      ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
+      kRun.store(true);
+      createLoopThread(ret.second);
+    } else
+      ALOGD("%s: Not starting loop", __func__);
+  } else {
+    ALOGE("%s: Enabled prop value invaild, resetting to valid one", __func__);
+    SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
   }
 }
 
@@ -155,7 +204,7 @@ void SmartCharge::startLoop(bool withrestart) {
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
   while (kRun.load()) {
-    auto per = BatteryHelper::getPercent();
+    auto per = getPercentFunc();
     if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
@@ -173,10 +222,10 @@ void SmartCharge::startLoop(bool withrestart) {
     if (tmp != status || !initdone) {
       switch (tmp) {
       case ChargeStatus::OFF:
-        BatteryHelper::setChargable(false);
+        setChargableFunc(false);
         break;
       case ChargeStatus::ON:
-        BatteryHelper::setChargable(true);
+        setChargableFunc(true);
         break;
       default:
         break;
@@ -221,8 +270,8 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   auto pair = ConfigPair<bool>{enable, restart};
   {
     std::unique_lock<std::mutex> _(config_lock);
-    ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d", __func__,
-          upper, lower, enable, restart, kRun.load());
+    ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d",
+          __func__, upper, lower, enable, restart, kRun.load());
     if (!verifyConfig(lower, upper))
       return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     if (lower == -1 && restart)
@@ -240,7 +289,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     }
   } else {
     kRun.store(false);
-    BatteryHelper::setChargable(true);
+    setChargableFunc(true);
     if (kLoopThread) {
       const std::lock_guard<std::mutex> _(thread_lock);
       if (kLoopThread->joinable()) {

@@ -8,8 +8,12 @@
 
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
 
+#include <dlfcn.h>
+
 #include <atomic>
 #include <condition_variable>
+#include <functional>
+#include <memory>
 #include <mutex>
 #include <thread>
 
@@ -40,6 +44,11 @@ class SmartCharge : public BnSmartCharge {
   // Used by above condition_variable
   std::mutex kCVLock;
 
+  void* handle;
+  std::function<void(const bool)> setChargableFunc;
+  std::function<int(void)> getPercentFunc;
+protected:
+  ~SmartCharge() { dlclose(handle); }
 public:
   SmartCharge();
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;

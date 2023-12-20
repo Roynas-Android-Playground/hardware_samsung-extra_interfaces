@@ -8,3 +8,4 @@ binder_call(hal_samsung_battery_default, servicemanager);
 
 set_prop(hal_samsung_battery_default, ext_smartcharge_prop);
 get_prop(hal_samsung_battery_default, ext_smartcharge_prop);
+get_prop(hal_samsung_battery_default, exported_default_prop);
