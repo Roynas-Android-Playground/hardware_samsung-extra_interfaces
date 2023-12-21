@@ -281,8 +281,13 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   SetProperty(kSmartChargeEnabledProp, pair.toString());
   if (enable) {
+    bool kThreadRunning;
     kRun.store(true);
-    if (kLoopThread) {
+    {
+      const std::lock_guard<std::mutex> _(thread_lock);
+      kThreadRunning = !!kLoopThread.get();
+    }
+    if (kThreadRunning) {
       ALOGW("Thread is running?");
     } else {
       createLoopThread(restart);
