@@ -46,7 +46,7 @@ static MapVerifyResult verifyOneMappingTable(const security_class_mapping map[],
         if (it.name == tclass) {
             for (const auto& perm : perms) {
                 if (std::find(it.perms.begin(), it.perms.end(), perm) == it.perms.end()) {
-                    ALOGE("Invaild permission '%s' for tclass '%s'", perm.c_str(), tclass.c_str());
+                    ALOGE("Invalid permission '%s' for tclass '%s'", perm.c_str(), tclass.c_str());
                     ret = MapVerifyResult::INAPPROPRIATE_PERMISSION;
                     return ret;
                 }
@@ -66,7 +66,7 @@ static bool isVaildPermission(const std::string& tclass, const std::vector<std::
     ret |= verifyOneMappingTable(secclass_map_ext, sizeof(secclass_map_ext) / sizeof(security_class_mapping),
                                  tclass, perms) <= MapVerifyResult::INAPPROPRIATE_PERMISSION;
     if (!ret) {
-        ALOGE("Invaild tclass: '%s'", tclass.c_str());
+        ALOGE("Invalid tclass: '%s'", tclass.c_str());
     }
     return ret;
 }
@@ -136,7 +136,7 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
   ++it; // Skip ending bracelet
   ++it; // Skip 'for'
   if (it == lines.end()) {
-    ALOGE("Invaild input: '%s'", str.c_str());
+    ALOGE("Invalid input: '%s'", str.c_str());
     return false;
   }
   do {
@@ -163,7 +163,7 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
       ctx.permissive = permissive - '0';
       attributes.erase(pit);
     } else {
-      ALOGE("Invaild permissive status: '%c'", permissive);
+      ALOGE("Invalid permissive status: '%c'", permissive);
     }
   }
   if (!ctx.tclass.empty())

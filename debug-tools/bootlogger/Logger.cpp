@@ -339,7 +339,7 @@ int main(int argc, const char** argv) {
   }
   kLogRoot = argv[1];
   if (kLogRoot.empty()) {
-    fprintf(stderr, "%s: Invaild empty string for log directory\n", argv[0]);
+    fprintf(stderr, "%s: Invalid empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
   auto kLogDir = fs::path(kLogRoot);

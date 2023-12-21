@@ -187,7 +187,7 @@ SmartCharge::SmartCharge(void) {
     } else
       ALOGD("%s: Not starting loop", __func__);
   } else {
-    ALOGE("%s: Enabled prop value invaild, resetting to valid one", __func__);
+    ALOGE("%s: Enabled prop value invalid, resetting to valid one", __func__);
     SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
   }
 }
