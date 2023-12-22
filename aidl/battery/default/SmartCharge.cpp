@@ -104,7 +104,7 @@ static void setChargableDef(bool enable) {
 
 void SmartCharge::loadHealthImpl(void) {
   // Try aidl
-  health_aidl = getServiceDefault<IHealthAIDL>();
+  health_aidl = waitServiceDefault<IHealthAIDL>();
   if (health_aidl == nullptr) {
     // hidl
     health_hidl = ::android::hardware::health::V2_0::get_health_service();
