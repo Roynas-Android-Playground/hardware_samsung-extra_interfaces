@@ -182,59 +182,82 @@ enum ChargeStatus {
 
 void SmartCharge::startLoop(bool withrestart) {
   bool initdone = false;
-  ChargeStatus tmp, status = ChargeStatus::NOOP;
+  ChargeStatus tmp = ChargeStatus::NOOP;
+  ChargeStatus status = ChargeStatus::NOOP;
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
   while (kRun.load()) {
-    int per;
+    int percent;
+    bool isDischarging, transactFailed = false;
 
     switch (healthState) {
     case USE_HEALTH_AIDL: {
-      auto ret = health_aidl->getCapacity(&per);
-      if (!ret.isOk())
-        per = ret.getStatus();
+      using android::hardware::health::BatteryStatus;
+
+      BatteryStatus status = BatteryStatus::UNKNOWN;
+      auto ret = health_aidl->getCapacity(&percent);
+      if (!ret.isOk()) {
+	transactFailed = true;
+      }
+      ret = health_aidl->getChargeStatus(&status);
+      if (!ret.isOk()) {
+	transactFailed = true;
+      }
+      isDischarging = status == BatteryStatus::DISCHARGING;
       break;
     }
     case USE_HEALTH_HIDL: {
       using ::android::hardware::health::V2_0::Result;
+      using ::android::hardware::health::V1_0::BatteryStatus;
+
       Result res = Result::UNKNOWN;
-      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
+      BatteryStatus status = BatteryStatus::UNKNOWN;
+      health_hidl->getCapacity([&res, &percent](Result hal_res, int32_t hal_value) {
         res = hal_res;
-        per = hal_value;
+        percent = hal_value;
       });
       if (res != Result::SUCCESS)
-        per = -(static_cast<int>(res));
+        transactFailed = true;
+      health_hidl->getChargeStatus([&res, &status](Result hal_res, BatteryStatus hal_value) {
+        res = hal_res;
+        status = hal_value;
+      });
+      if (res != Result::SUCCESS)
+        transactFailed = true;
+      isDischarging = status == BatteryStatus::DISCHARGING;
       break;
     }
     }
-    if (per < 0) {
+    if (transactFailed) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
-      ALOGE("%s: exit loop: percent: %d", __func__, per);
+      ALOGE("%s: exit loop: Trasaction failed", __func__);
       break;
     }
-    if (per > upper)
-      tmp = ChargeStatus::OFF;
-    else if (withrestart && per < lower)
-      tmp = ChargeStatus::ON;
-    else if (!withrestart && per <= upper - 1)
-      tmp = ChargeStatus::ON;
-    else
-      tmp = ChargeStatus::NOOP;
-    if (tmp != status || !initdone) {
-      switch (tmp) {
-      case ChargeStatus::OFF:
-        setChargableFunc(false);
-        break;
-      case ChargeStatus::ON:
-        setChargableFunc(true);
-        break;
-      default:
-        break;
+    if (!isDischarging) {
+      if (percent > upper)
+        tmp = ChargeStatus::OFF;
+      else if (withrestart && percent < lower)
+        tmp = ChargeStatus::ON;
+      else if (!withrestart && percent <= upper - 1)
+        tmp = ChargeStatus::ON;
+
+      if (tmp != status || !initdone) {
+        switch (tmp) {
+        case ChargeStatus::OFF:
+          setChargableFunc(false);
+          break;
+        case ChargeStatus::ON:
+          setChargableFunc(true);
+          break;
+        default:
+          break;
+        }
+        status = tmp;
+        initdone = true;
       }
-      status = tmp;
-      initdone = true;
     }
+
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
       // cv signaled, exit now
       break;
