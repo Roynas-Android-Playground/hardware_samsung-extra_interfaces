@@ -4,11 +4,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //
 
-cc_library_headers {
-    name: "aidl_battery_module_headers",
-    export_include_dirs: ["modules"],
-}
-
 cc_binary {
     name: "vendor.samsung_ext.framework.battery-service",
     relative_install_path: "hw",
@@ -32,4 +27,5 @@ cc_binary {
     ],
     whole_static_libs: ["libhealthhalutils"],
     system_ext_specific: true,
+    required: ["battery.default"],
 }

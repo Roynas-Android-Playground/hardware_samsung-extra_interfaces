@@ -8,7 +8,7 @@
 
 #include <GetServiceSupport.h>
 #include <SafeStoi.h>
-#include <android-base/file.h>
+
 #include <android-base/properties.h>
 #include <log/log.h>
 
@@ -25,10 +25,8 @@ namespace framework {
 namespace battery {
 
 using ::android::base::GetProperty;
-using ::android::base::ReadFileToString;
 using ::android::base::SetProperty;
 using ::android::base::WaitForPropertyCreation;
-using ::android::base::WriteStringToFile;
 
 using namespace std::chrono_literals;
 
@@ -36,8 +34,6 @@ static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
 static const char kSmartChargeEnabledProp[] = "persist.ext.smartcharge.enabled";
 static const char kSmartChargeOverrideProp[] = "ro.hardware.battery";
 static const char kComma = ',';
-static const char kChargeCtlSysfs[] =
-    "/sys/class/power_supply/battery/batt_slate_mode";
 
 template <typename T>
 using is_integral_or_bool =
@@ -98,10 +94,6 @@ bool getAndParse(const char *prop, ConfigPair<U> *pair) {
 
 const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
 
-static void setChargableDef(bool enable) {
-  WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
-}
-
 void SmartCharge::loadHealthImpl(void) {
   // Try aidl
   health_aidl = waitServiceDefault<IHealthAIDL>();
@@ -138,29 +130,27 @@ bool SmartCharge::loadAndParseConfigProp(void) {
 }
 
 void SmartCharge::loadOverrideLibrary(void) {
-  std::string prop = GetProperty(kSmartChargeOverrideProp, "");
+  const std::string path = "/system_ext/lib64/hw/battery."
+        + GetProperty(kSmartChargeOverrideProp, "default") + ".so";
 
-  if (!prop.empty()) {
-    ALOGI("%s: Try dlopen '%s'", __func__, prop.c_str());
-    handle = dlopen(prop.c_str(), RTLD_NOW);
-    if (handle) {
-      setChargableFunc = reinterpret_cast<decltype(&setChargableDef)>(
-          dlsym(handle, "setChargable"));
+  ALOGI("%s: Try dlopen '%s'", __func__, path.c_str());
+  handle = dlopen(path.c_str(), RTLD_NOW);
+  if (handle) {
+    setChargableFunc = reinterpret_cast<void(*)(const bool)>(
+        dlsym(handle, "setChargable"));
 
-      if (setChargableFunc) {
-        ALOGD("%s: setChargable using loaded impl", __func__);
-      } else {
-        ALOGW("%s: Failed to load setChargable function", __func__);
-        // Unused handle, close it
-        dlclose(handle);
-      }
+    if (setChargableFunc) {
+      ALOGD("%s: setChargable function loaded", __func__);
     } else {
-      ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
+      ALOGE("%s: Failed to find setChargable symbol", __func__);
+      // Unused handle, close it
+      dlclose(handle);
     }
+  } else {
+    ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
   }
   if (!setChargableFunc) {
-    setChargableFunc = setChargableDef;
-    ALOGD("%s: setChargable using default impl", __func__);
+    LOG_ALWAYS_FATAL("Failed to load setChargable function from impl library");
   }
 }
 
