@@ -55,11 +55,15 @@ class SmartCharge : public BnSmartCharge {
 
   sp<IHealth> health_hidl;
   std::shared_ptr<IHealthAIDL> health_aidl;
-  void loadHealthImpl();
   enum {
       USE_HEALTH_AIDL,
       USE_HEALTH_HIDL,
   } healthState;
+
+  void loadHealthImpl();
+  bool loadAndParseConfigProp();
+  void loadOverrideLibrary();
+  void loadEnabledAndStart();
 public:
   SmartCharge();
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;

@@ -121,23 +121,25 @@ void SmartCharge::loadHealthImpl(void) {
   }
 }
 
-SmartCharge::SmartCharge(void) {
-  {
-    ConfigPair<int> ret{};
-    if (getAndParse(kSmartChargeConfigProp, &ret) &&
-        verifyConfig(ret.first, ret.second)) {
-      upper = ret.second;
-      lower = ret.first;
-      ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
-    } else {
-      upper = -1;
-      lower = -1;
-      ALOGW("%s: Parsing config failed", __func__);
-      return;
-    }
+bool SmartCharge::loadAndParseConfigProp(void) {
+  ConfigPair<int> ret{};
+  if (getAndParse(kSmartChargeConfigProp, &ret) &&
+      verifyConfig(ret.first, ret.second)) {
+    upper = ret.second;
+    lower = ret.first;
+    ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
+  } else {
+    upper = -1;
+    lower = -1;
+    ALOGW("%s: Parsing config failed", __func__);
+    return false;
   }
+  return true;
+}
+
+void SmartCharge::loadOverrideLibrary(void) {
   std::string prop = GetProperty(kSmartChargeOverrideProp, "");
-  ConfigPair<bool> ret{};
+
   if (!prop.empty()) {
     ALOGI("%s: Try dlopen '%s'", __func__, prop.c_str());
     handle = dlopen(prop.c_str(), RTLD_NOW);
@@ -160,7 +162,11 @@ SmartCharge::SmartCharge(void) {
     setChargableFunc = setChargableDef;
     ALOGD("%s: setChargable using default impl", __func__);
   }
-  loadHealthImpl();
+}
+
+void SmartCharge::loadEnabledAndStart(void) {
+  ConfigPair<bool> ret{};
+
   if (getAndParse(kSmartChargeEnabledProp, &ret)) {
     if (ret.first) {
       ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
@@ -171,6 +177,17 @@ SmartCharge::SmartCharge(void) {
   } else {
     ALOGE("%s: Enabled prop value invalid, resetting to valid one", __func__);
     SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
+  }
+}
+
+SmartCharge::SmartCharge(void) {
+  bool ret;
+
+  ret = loadAndParseConfigProp();
+  if (ret) {
+    loadOverrideLibrary();
+    loadHealthImpl();
+    loadEnabledAndStart();
   }
 }
 
