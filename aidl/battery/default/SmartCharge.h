@@ -59,7 +59,6 @@ class SmartCharge : public BnSmartCharge {
   enum {
       USE_HEALTH_AIDL,
       USE_HEALTH_HIDL,
-      FAILED,
   } healthState;
 public:
   SmartCharge();

@@ -103,7 +103,6 @@ static void setChargableDef(bool enable) {
 }
 
 void SmartCharge::loadHealthImpl(void) {
-  healthState = FAILED;
   // Try aidl
   health_aidl = getServiceDefault<IHealthAIDL>();
   if (health_aidl == nullptr) {
@@ -112,6 +111,9 @@ void SmartCharge::loadHealthImpl(void) {
     if (health_hidl != nullptr) {
       healthState = USE_HEALTH_HIDL;
       ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
+    } else {
+      LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
+      __builtin_unreachable();
     }
   } else {
     healthState = USE_HEALTH_AIDL;
@@ -204,9 +206,6 @@ void SmartCharge::startLoop(bool withrestart) {
         per = -(static_cast<int>(res));
       break;
     }
-    case FAILED:
-      per = -1;
-      break;
     }
     if (per < 0) {
       kRun.store(false);
