@@ -5,8 +5,8 @@
  */
 
 #include "SmartCharge.h"
-#include "modules/battery.h"
 
+#include <GetServiceSupport.h>
 #include <SafeStoi.h>
 #include <android-base/file.h>
 #include <android-base/properties.h>
@@ -38,8 +38,6 @@ static const char kSmartChargeOverrideProp[] = "ro.hardware.battery";
 static const char kComma = ',';
 static const char kChargeCtlSysfs[] =
     "/sys/class/power_supply/battery/batt_slate_mode";
-static const char kBatteryPercentSysfs[] =
-    "/sys/class/power_supply/battery/capacity";
 
 template <typename T>
 using is_integral_or_bool =
@@ -100,42 +98,26 @@ bool getAndParse(const char *prop, ConfigPair<U> *pair) {
 
 const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
 
-// Default impls
 static void setChargableDef(bool enable) {
   WriteStringToFile(std::to_string(!enable), kChargeCtlSysfs);
 }
-static int getPercentDef(void) {
-  std::string data;
-  ReadFileToString(kBatteryPercentSysfs, &data);
-  return stoi_safe(data);
+
+void SmartCharge::loadHealthImpl(void) {
+  healthState = FAILED;
+  // Try aidl
+  health_aidl = getServiceDefault<IHealthAIDL>();
+  if (health_aidl == nullptr) {
+    // hidl
+    health_hidl = ::android::hardware::health::V2_0::get_health_service();
+    if (health_hidl != nullptr) {
+      healthState = USE_HEALTH_HIDL;
+      ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
+    }
+  } else {
+    healthState = USE_HEALTH_AIDL;
+    ALOGD("%s: Connected to health AIDL HAL", __func__);
+  }
 }
-
-// Helper macros
-
-//    bit        func       def_func       name
-// SPECIFIC_* fnvariable  def_func_hdl  dlsym_name
-#define TEST_AND_ASSIGN(bit, func, def_func, name)                             \
-  do {                                                                         \
-    if (mask & bit) {                                                          \
-      func = (decltype(&def_func))dlsym(handle, name);                         \
-      if (func) {                                                              \
-        ALOGD("" #func " using loaded impl");                                  \
-        isHandleUsed = true;                                                   \
-      } else {                                                                 \
-        ALOGW("Mask specified " #bit " but sym " name "NULL");                 \
-      }                                                                        \
-    }                                                                          \
-  } while (0);
-
-//    func      def_func
-// fnvariable  defaultfunc
-#define TEST_OR_DEFAULT(func, def_func)                                        \
-  do {                                                                         \
-    if (!func) {                                                               \
-      func = def_func;                                                         \
-      ALOGD("" #func " using default impl");                                   \
-    }                                                                          \
-  } while (0);
 
 SmartCharge::SmartCharge(void) {
   {
@@ -158,27 +140,25 @@ SmartCharge::SmartCharge(void) {
     ALOGI("%s: Try dlopen '%s'", __func__, prop.c_str());
     handle = dlopen(prop.c_str(), RTLD_NOW);
     if (handle) {
-      bool isHandleUsed = false;
-      auto maskPtr = (int *)dlsym(handle, "availableMask");
-      if (maskPtr) {
-        int mask = *maskPtr;
-        if ((mask & (SPECIFIC_SETCHARGE | SPECIFIC_GETPERCENT)) == mask) {
-          TEST_AND_ASSIGN(SPECIFIC_SETCHARGE, setChargableFunc, setChargableDef, "setChargable");
-          TEST_AND_ASSIGN(SPECIFIC_GETPERCENT, getPercentFunc, getPercentDef, "getPercent");
-        } else {
-          ALOGE("%s: Invalid mask: %d", __func__, mask);
-        }
-        if (!isHandleUsed) {
-          // Unused handle, close it
-          dlclose(handle);
-        }
+      setChargableFunc = reinterpret_cast<decltype(&setChargableDef)>(
+          dlsym(handle, "setChargable"));
+
+      if (setChargableFunc) {
+        ALOGD("%s: setChargable using loaded impl", __func__);
+      } else {
+        ALOGW("%s: Failed to load setChargable function", __func__);
+        // Unused handle, close it
+        dlclose(handle);
       }
     } else {
       ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
     }
   }
-  TEST_OR_DEFAULT(setChargableFunc, setChargableDef);
-  TEST_OR_DEFAULT(getPercentFunc, getPercentDef);
+  if (!setChargableFunc) {
+    setChargableFunc = setChargableDef;
+    ALOGD("%s: setChargable using default impl", __func__);
+  }
+  loadHealthImpl();
   if (getAndParse(kSmartChargeEnabledProp, &ret)) {
     if (ret.first) {
       ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
@@ -204,7 +184,30 @@ void SmartCharge::startLoop(bool withrestart) {
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
   while (kRun.load()) {
-    auto per = getPercentFunc();
+    int per;
+
+    switch (healthState) {
+    case USE_HEALTH_AIDL: {
+      auto ret = health_aidl->getCapacity(&per);
+      if (!ret.isOk())
+        per = ret.getStatus();
+      break;
+    }
+    case USE_HEALTH_HIDL: {
+      using ::android::hardware::health::V2_0::Result;
+      Result res = Result::UNKNOWN;
+      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
+        res = hal_res;
+        per = hal_value;
+      });
+      if (res != Result::SUCCESS)
+        per = -(static_cast<int>(res));
+      break;
+    }
+    case FAILED:
+      per = -1;
+      break;
+    }
     if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);

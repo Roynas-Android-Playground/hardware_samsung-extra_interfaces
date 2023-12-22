@@ -18,12 +18,18 @@ cc_binary {
         "SmartCharge.cpp",
         "service.cpp",
     ],
+    header_libs: ["libext_support"],
     shared_libs: [
         "libbase",
         "libbinder_ndk",
+        "libhidlbase",
         "liblog",
+        "libutils",
         "libsafestoi",
+        "android.hardware.health@2.0",
+        "android.hardware.health-V1-ndk",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
+    whole_static_libs: ["libhealthhalutils"],
     system_ext_specific: true,
 }

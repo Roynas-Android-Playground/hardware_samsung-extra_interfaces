@@ -6,6 +6,8 @@ init_daemon_domain(hal_samsung_battery_default)
 
 binder_call(hal_samsung_battery_default, servicemanager);
 
+hal_client_domain(hal_samsung_battery_default, hal_health)
+
 set_prop(hal_samsung_battery_default, ext_smartcharge_prop);
 get_prop(hal_samsung_battery_default, ext_smartcharge_prop);
 get_prop(hal_samsung_battery_default, exported_default_prop);

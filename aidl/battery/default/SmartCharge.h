@@ -7,6 +7,8 @@
 #pragma once
 
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
+#include <aidl/android/hardware/health/BnHealth.h>
+#include <healthhalutils/HealthHalUtils.h>
 
 #include <dlfcn.h>
 
@@ -16,6 +18,10 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+
+using android::hardware::health::V2_0::IHealth;
+using android::sp;
+using IHealthAIDL = aidl::android::hardware::health::IHealth;
 
 namespace aidl {
 namespace vendor {
@@ -46,9 +52,15 @@ class SmartCharge : public BnSmartCharge {
 
   void* handle;
   std::function<void(const bool)> setChargableFunc;
-  std::function<int(void)> getPercentFunc;
-protected:
-  ~SmartCharge() { dlclose(handle); }
+
+  sp<IHealth> health_hidl;
+  std::shared_ptr<IHealthAIDL> health_aidl;
+  void loadHealthImpl();
+  enum {
+      USE_HEALTH_AIDL,
+      USE_HEALTH_HIDL,
+      FAILED,
+  } healthState;
 public:
   SmartCharge();
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;
