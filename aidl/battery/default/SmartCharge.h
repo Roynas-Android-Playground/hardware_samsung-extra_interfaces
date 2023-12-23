@@ -69,6 +69,9 @@ class SmartCharge : public BnSmartCharge {
   sp<hidl_death_recipient> hidl_death_recp;
   std::shared_ptr<IHealthAIDL> health_aidl;
   ndk::ScopedAIBinder_DeathRecipient aidl_death_recp;
+  // Protect health_hal pointers
+  std::mutex hal_health_lock;
+
   enum {
       USE_HEALTH_AIDL,
       USE_HEALTH_HIDL,

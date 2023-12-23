@@ -29,6 +29,8 @@ using ::android::base::GetProperty;
 using ::android::base::SetProperty;
 using ::android::base::WaitForPropertyCreation;
 
+using ScopedLock = const std::lock_guard<std::mutex>;
+
 using namespace std::chrono_literals;
 
 static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
@@ -102,6 +104,7 @@ static void onServiceDied(void *cookie) {
 void SmartCharge::loadHealthImpl(void) {
   bool linkToDeathSuccess;
   std::string reason;
+  ScopedLock _(hal_health_lock);
 
   // Try aidl
   health_aidl = waitServiceDefault<IHealthAIDL>();
@@ -222,6 +225,7 @@ void SmartCharge::startLoop(bool withrestart) {
     case USE_HEALTH_AIDL: {
       using android::hardware::health::BatteryStatus;
 
+      ScopedLock _(hal_health_lock);
       BatteryStatus status = BatteryStatus::UNKNOWN;
       auto ret = health_aidl->getCapacity(&percent);
       if (!ret.isOk()) {
@@ -238,6 +242,7 @@ void SmartCharge::startLoop(bool withrestart) {
       using ::android::hardware::health::V2_0::Result;
       using ::android::hardware::health::V1_0::BatteryStatus;
 
+      ScopedLock _(hal_health_lock);
       Result res = Result::UNKNOWN;
       BatteryStatus status = BatteryStatus::UNKNOWN;
       health_hidl->getCapacity([&res, &percent](Result hal_res, int32_t hal_value) {
@@ -296,7 +301,7 @@ void SmartCharge::startLoop(bool withrestart) {
 }
 
 void SmartCharge::createLoopThread(bool restart) {
-  const std::lock_guard<std::mutex> _(thread_lock);
+  ScopedLock _(thread_lock);
   ALOGD("%s: create thread", __func__);
   kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
 }
@@ -337,7 +342,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     bool kThreadRunning;
     kRun.store(true);
     {
-      const std::lock_guard<std::mutex> _(thread_lock);
+      ScopedLock _(thread_lock);
       kThreadRunning = !!kLoopThread.get();
     }
     if (kThreadRunning) {
@@ -349,7 +354,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     kRun.store(false);
     setChargableFunc(true);
     if (kLoopThread) {
-      const std::lock_guard<std::mutex> _(thread_lock);
+      ScopedLock _(thread_lock);
       if (kLoopThread->joinable()) {
         cv.notify_one();
         kLoopThread->join();
