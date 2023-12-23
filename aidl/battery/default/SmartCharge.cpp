@@ -10,6 +10,7 @@
 #include <SafeStoi.h>
 
 #include <android-base/properties.h>
+#include <hidl/HidlTransportSupport.h>
 #include <log/log.h>
 
 #include <chrono>
@@ -94,7 +95,14 @@ bool getAndParse(const char *prop, ConfigPair<U> *pair) {
 
 const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
 
+static void onServiceDied(void *cookie) {
+  reinterpret_cast<SmartCharge *>(cookie)->loadHealthImpl();
+}
+
 void SmartCharge::loadHealthImpl(void) {
+  bool linkToDeathSuccess;
+  std::string reason;
+
   // Try aidl
   health_aidl = waitServiceDefault<IHealthAIDL>();
   if (health_aidl == nullptr) {
@@ -103,6 +111,10 @@ void SmartCharge::loadHealthImpl(void) {
     if (health_hidl != nullptr) {
       healthState = USE_HEALTH_HIDL;
       ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
+      hidl_death_recp = new hidl_health_death_recipient(health_hidl);
+      auto ret = health_hidl->linkToDeath(hidl_death_recp, reinterpret_cast<uint64_t>(this));
+      linkToDeathSuccess = ret.isOk();
+      reason = ret.description();
     } else {
       LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
       __builtin_unreachable();
@@ -110,7 +122,15 @@ void SmartCharge::loadHealthImpl(void) {
   } else {
     healthState = USE_HEALTH_AIDL;
     ALOGD("%s: Connected to health AIDL HAL", __func__);
+    aidl_death_recp = ndk::ScopedAIBinder_DeathRecipient(
+        AIBinder_DeathRecipient_new(onServiceDied)
+    );
+    auto ret = AIBinder_linkToDeath(health_aidl->asBinder().get(), aidl_death_recp.get(), this);
+    linkToDeathSuccess = ret == STATUS_OK;
+    reason = ndk::ScopedAStatus(AStatus_fromStatus(ret)).getDescription();
   }
+  if (!linkToDeathSuccess)
+    ALOGW("%s: linkToDeath failed: %s", __func__, reason.c_str());
 }
 
 bool SmartCharge::loadAndParseConfigProp(void) {
@@ -340,6 +360,15 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   }
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
+}
+
+using ::android::hardware::interfacesEqual;
+
+void hidl_health_death_recipient::serviceDied(uint64_t cookie,
+                                              const wp<::android::hidl::base::V1_0::IBase>& who) {
+    if (mHealth != nullptr && interfacesEqual(mHealth, who.promote())) {
+        onServiceDied(reinterpret_cast<void*>(cookie));
+    }
 }
 
 } // namespace battery
