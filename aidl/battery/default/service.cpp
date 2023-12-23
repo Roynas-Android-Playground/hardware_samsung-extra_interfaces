@@ -14,6 +14,7 @@ using ::aidl::vendor::samsung_ext::framework::battery::SmartCharge;
 
 int main() {
   ABinderProcess_setThreadPoolMaxThreadCount(8);
+  ABinderProcess_startThreadPool();
   std::shared_ptr<SmartCharge> smartcharge =
       ndk::SharedRefBase::make<SmartCharge>();
 
