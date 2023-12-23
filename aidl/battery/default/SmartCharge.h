@@ -75,7 +75,7 @@ class SmartCharge : public BnSmartCharge {
   } healthState;
 
   bool loadAndParseConfigProp();
-  void loadOverrideLibrary();
+  void loadImplLibrary();
   void loadEnabledAndStart();
 
 public:

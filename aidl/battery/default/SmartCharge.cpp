@@ -149,7 +149,7 @@ bool SmartCharge::loadAndParseConfigProp(void) {
   return true;
 }
 
-void SmartCharge::loadOverrideLibrary(void) {
+void SmartCharge::loadImplLibrary(void) {
   const std::string path = "/system_ext/lib64/hw/battery."
         + GetProperty(kSmartChargeOverrideProp, "default") + ".so";
 
@@ -193,10 +193,11 @@ void SmartCharge::loadEnabledAndStart(void) {
 SmartCharge::SmartCharge(void) {
   bool ret;
 
+  loadHealthImpl();
+  loadImplLibrary();
+
   ret = loadAndParseConfigProp();
   if (ret) {
-    loadOverrideLibrary();
-    loadHealthImpl();
     loadEnabledAndStart();
   }
 }
