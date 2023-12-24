@@ -152,9 +152,16 @@ bool SmartCharge::loadAndParseConfigProp(void) {
   return true;
 }
 
+#ifdef __LP64__
+#define LIB_PATH "/system_ext/lib64/hw/"
+#else
+#define LIB_PATH "/system_ext/lib/hw/"
+#endif
+
 void SmartCharge::loadImplLibrary(void) {
-  const std::string path = "/system_ext/lib64/hw/battery."
-        + GetProperty(kSmartChargeOverrideProp, "default") + ".so";
+  const static std::string filename = "battery." +
+    GetProperty(kSmartChargeOverrideProp, "default") + ".so";
+  const static std::string path = LIB_PATH + filename;
 
   ALOGI("%s: Try dlopen '%s'", __func__, path.c_str());
   handle = dlopen(path.c_str(), RTLD_NOW);
