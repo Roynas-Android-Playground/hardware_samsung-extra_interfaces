@@ -220,84 +220,64 @@ enum ChargeStatus {
 
 void SmartCharge::startLoop(bool withrestart) {
   bool initdone = false;
-  ChargeStatus tmp = ChargeStatus::NOOP;
-  ChargeStatus status = ChargeStatus::NOOP;
+  ChargeStatus tmp, status = ChargeStatus::NOOP;
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
   while (kRun.load()) {
-    int percent;
-    bool isDischarging, transactFailed = false;
+    int per;
 
     switch (healthState) {
     case USE_HEALTH_AIDL: {
-      using android::hardware::health::BatteryStatus;
 
       ScopedLock _(hal_health_lock);
-      BatteryStatus status = BatteryStatus::UNKNOWN;
-      auto ret = health_aidl->getCapacity(&percent);
+      auto ret = health_aidl->getCapacity(&per);
       if (!ret.isOk()) {
-	transactFailed = true;
+	per = ret.getStatus();
       }
-      ret = health_aidl->getChargeStatus(&status);
-      if (!ret.isOk()) {
-	transactFailed = true;
-      }
-      isDischarging = status == BatteryStatus::DISCHARGING;
       break;
     }
     case USE_HEALTH_HIDL: {
       using ::android::hardware::health::V2_0::Result;
-      using ::android::hardware::health::V1_0::BatteryStatus;
 
       ScopedLock _(hal_health_lock);
       Result res = Result::UNKNOWN;
-      BatteryStatus status = BatteryStatus::UNKNOWN;
-      health_hidl->getCapacity([&res, &percent](Result hal_res, int32_t hal_value) {
+      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
         res = hal_res;
-        percent = hal_value;
+        per = hal_value;
       });
       if (res != Result::SUCCESS)
-        transactFailed = true;
-      health_hidl->getChargeStatus([&res, &status](Result hal_res, BatteryStatus hal_value) {
-        res = hal_res;
-        status = hal_value;
-      });
-      if (res != Result::SUCCESS)
-        transactFailed = true;
-      isDischarging = status == BatteryStatus::DISCHARGING;
+        per = -(static_cast<int>(res));
       break;
     }
     }
-    if (transactFailed) {
+    if (per < 0) {
       kRun.store(false);
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
-      ALOGE("%s: exit loop: Trasaction failed", __func__);
+      ALOGE("%s: exit loop: retval: %d", __func__, per);
       break;
     }
-    if (!isDischarging) {
-      if (percent > upper)
-        tmp = ChargeStatus::OFF;
-      else if (withrestart && percent < lower)
-        tmp = ChargeStatus::ON;
-      else if (!withrestart && percent <= upper - 1)
-        tmp = ChargeStatus::ON;
-
-      if (tmp != status || !initdone) {
-        switch (tmp) {
-        case ChargeStatus::OFF:
-          setChargableFunc(false);
-          break;
-        case ChargeStatus::ON:
-          setChargableFunc(true);
-          break;
-        default:
-          break;
-        }
-        status = tmp;
-        initdone = true;
+    if (per > upper)
+      tmp = ChargeStatus::OFF;
+    else if (withrestart && per < lower)
+      tmp = ChargeStatus::ON;
+    else if (!withrestart && per <= upper - 1)
+      tmp = ChargeStatus::ON;
+    else
+      tmp = ChargeStatus::NOOP;
+    if (tmp != status || !initdone) {
+      switch (tmp) {
+      case ChargeStatus::OFF:
+        setChargableFunc(false);
+        break;
+      case ChargeStatus::ON:
+        setChargableFunc(true);
+        break;
+      default:
+        break;
       }
+      status = tmp;
+      initdone = true;
     }
-
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
       // cv signaled, exit now
       break;
