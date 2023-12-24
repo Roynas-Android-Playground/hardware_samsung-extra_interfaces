@@ -438,7 +438,7 @@ int main(int argc, const char** argv) {
 
   if (kAvcCtx) {
     std::vector<std::string> allowrules;
-    std::stringstream iss;
+    OutputContext seGenCtx(kLogDir, "sepolicy.gen.txt");
     for (auto& e1 : *kAvcCtx) {
       for (auto& e2 : *kAvcCtx) {
         if (&e1 == &e2) continue;
@@ -452,10 +452,7 @@ int main(int argc, const char** argv) {
     }
     eraseDuplicates(allowrules);
     for (const auto& l : allowrules)
-      iss << l;
-    auto rules = kLogDir;
-    rules.append("rules.autogen.te");
-    WriteStringToFile(iss.str(), rules);
+      seGenCtx.writeToOutput(l);
   }
   return 0;
 }
