@@ -14,7 +14,6 @@ Sub directory  | Description
 `app/SmartCharge`              | Client to the AIDL Smartcharge HAL, actual user frontend app providing the UI for configuring 'Smartcharge' settings
 `debug-tools/bootlogger`       | A boot time logger binary used to collect dmesg, logcat logs while system boot, or at system runtime. Supports AVC (Access Vector Control) denial message filtering and even generating allow rules for those denials.
 `debug-tools/dlopener`         | A little program to try dlopen(3) on a given ELF file. Prints whether dlopening succeeded or failed. installed as 32/64 system/vendor variants.
-`keymaster`                    | Shim for Samsung's keymaster implementations on VNDK 34. Common VNDK33 package so sorted out to here
 `libextsupport`                | Support headers used by test_clients and AIDL impls
 `libsafestoi`                  | Shared common string to int safe version function. as std::stoi does throw exceptions.
 `sepolicy`                     | SEPolicy rules for executable binaries and apps to function, some parts need to be added to device tree side as well.
