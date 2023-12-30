@@ -190,7 +190,6 @@ void SmartCharge::loadEnabledAndStart(void) {
   if (getAndParse(kSmartChargeEnabledProp, &ret)) {
     if (ret.first) {
       ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
-      kRun.store(true);
       createLoopThread(ret.second);
     } else
       ALOGD("%s: Not starting loop", __func__);
@@ -223,7 +222,7 @@ void SmartCharge::startLoop(bool withrestart) {
   ChargeStatus tmp, status = ChargeStatus::NOOP;
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
-  while (kRun.load()) {
+  while (true) {
     int per;
 
     switch (healthState) {
@@ -251,7 +250,7 @@ void SmartCharge::startLoop(bool withrestart) {
     }
     }
     if (per < 0) {
-      kRun.store(false);
+      kRunning = false;
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
       ALOGE("%s: exit loop: retval: %d", __func__, per);
       break;
@@ -291,14 +290,14 @@ void SmartCharge::createLoopThread(bool restart) {
   ScopedLock _(thread_lock);
   ALOGD("%s: create thread", __func__);
   kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
+  kRunning = true;
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
-  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_,
-        kRun.load());
+  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_, kRunning.load());
   if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  if (kRun.load())
+  if (kRunning)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
   auto pair = ConfigPair<int>{lower_ < 0 ? -1 : lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.toString());
@@ -316,37 +315,31 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   {
     std::unique_lock<std::mutex> _(config_lock);
     ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d",
-          __func__, upper, lower, enable, restart, kRun.load());
+          __func__, upper, lower, enable, restart, kRunning.load());
     if (!verifyConfig(lower, upper))
       return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
     if (lower == -1 && restart)
       return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   }
-  if (kRun.load() == enable)
+  if (kRunning == enable)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   SetProperty(kSmartChargeEnabledProp, pair.toString());
   if (enable) {
-    bool kThreadRunning;
-    kRun.store(true);
-    {
-      ScopedLock _(thread_lock);
-      kThreadRunning = !!kLoopThread.get();
-    }
-    if (kThreadRunning) {
+    if (kRunning) {
       ALOGW("Thread is running?");
     } else {
       createLoopThread(restart);
     }
   } else {
-    kRun.store(false);
     setChargableFunc(true);
-    if (kLoopThread) {
+    if (kRunning) {
       ScopedLock _(thread_lock);
       if (kLoopThread->joinable()) {
         cv.notify_one();
         kLoopThread->join();
       }
       kLoopThread.reset();
+      kRunning = false;
     } else {
       ALOGW("No threads to stop?");
     }

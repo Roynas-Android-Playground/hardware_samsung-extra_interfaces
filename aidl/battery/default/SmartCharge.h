@@ -55,8 +55,8 @@ class SmartCharge : public BnSmartCharge {
   // Starter function
   void createLoopThread(bool restart);
 
-  // Thread controller
-  std::atomic_bool kRun;
+  // Thread status indicator
+  std::atomic_bool kRunning;
 
   std::condition_variable cv;
   // Used by above condition_variable
