@@ -33,6 +33,8 @@ using ScopedLock = const std::lock_guard<std::mutex>;
 
 using namespace std::chrono_literals;
 
+static constexpr int kInvalidCfg = -1;
+
 static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
 static const char kSmartChargeEnabledProp[] = "persist.ext.smartcharge.enabled";
 static const char kSmartChargeOverrideProp[] = "ro.hardware.battery";
@@ -299,11 +301,13 @@ ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRunning)
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  auto pair = ConfigPair<int>{lower_ < 0 ? -1 : lower_, upper_};
+  if (lower_ < 0)
+    lower_ = kInvalidCfg;
+  auto pair = ConfigPair<int>{lower_, upper_};
   SetProperty(kSmartChargeConfigProp, pair.toString());
   {
     std::unique_lock<std::mutex> _(config_lock);
-    lower = lower_ < 0 ? -1 : lower_;
+    lower = lower_;
     upper = upper_;
   }
   ALOGD("%s: Exit", __func__);
@@ -318,7 +322,7 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
           __func__, upper, lower, enable, restart, kRunning.load());
     if (!verifyConfig(lower, upper))
       return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-    if (lower == -1 && restart)
+    if (lower == kInvalidCfg && restart)
       return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   }
   if (kRunning == enable)
