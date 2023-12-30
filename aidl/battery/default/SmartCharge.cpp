@@ -180,7 +180,7 @@ void SmartCharge::loadImplLibrary(void) {
     ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
   }
   if (!setChargableFunc) {
-    LOG_ALWAYS_FATAL("Failed to load setChargable function from impl library");
+    setChargableFunc = [] (const bool) {};
   }
 }
 
