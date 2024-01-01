@@ -73,9 +73,16 @@ class SmartCharge : public BnSmartCharge {
   std::mutex hal_health_lock;
 
   enum {
+      UNKNOWN,
       USE_HEALTH_AIDL,
       USE_HEALTH_HIDL,
-  } healthState;
+  } healthState = UNKNOWN;
+
+  enum ChargeStatus {
+      ON,
+      OFF,
+      NOOP,
+  } status;
 
   bool loadAndParseConfigProp();
   void loadImplLibrary();
@@ -86,6 +93,8 @@ public:
   SmartCharge();
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;
   ndk::ScopedAStatus activate(bool enable, bool restart) override;
+
+  binder_status_t dump(int fd, const char** args, uint32_t numArgs) override;
 };
 
 } // namespace battery

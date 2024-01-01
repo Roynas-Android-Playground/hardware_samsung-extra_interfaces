@@ -220,8 +220,10 @@ enum ChargeStatus {
 };
 
 void SmartCharge::startLoop(bool withrestart) {
+  ChargeStatus tmp;
   bool initdone = false;
-  ChargeStatus tmp, status = ChargeStatus::NOOP;
+  status = ChargeStatus::NOOP;
+
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
   while (true) {
@@ -250,6 +252,8 @@ void SmartCharge::startLoop(bool withrestart) {
         per = -(static_cast<int>(res));
       break;
     }
+    default:
+      __builtin_unreachable();
     }
     if (per < 0) {
       kRunning = false;
@@ -350,6 +354,48 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   }
   ALOGD("%s: Exit", __func__);
   return ndk::ScopedAStatus::ok();
+}
+
+binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* numArgs */) {
+  auto tryLockFn = [](std::mutex& m) {
+     const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
+     return lk.owns_lock();
+  };
+
+  dprintf(fd, "Loop thread running: %d\n", kRunning.load());
+  if (kRunning) {
+     dprintf(fd, "Loop thread charge control state\n");
+     switch (status) {
+        case ChargeStatus::ON:
+            dprintf(fd, "ON");
+            break;
+        case ChargeStatus::OFF:
+            dprintf(fd, "OFF");
+            break;
+        case ChargeStatus::NOOP:
+            dprintf(fd, "NOOP");
+            break;
+     }
+     dprintf(fd, "\n");
+  }
+  dprintf(fd, "Configuration (upper/lower): %d %d\n", upper, lower);
+  dprintf(fd, "Mutex locked (config/thread/cv) %d %d %d\n", tryLockFn(config_lock),
+     tryLockFn(thread_lock), tryLockFn(kCVLock));
+  dprintf(fd, "Connected Health HAL: ");
+  switch (healthState) {
+     case USE_HEALTH_AIDL:
+         dprintf(fd, "AIDL Health HAL V1");
+	 break;
+     case USE_HEALTH_HIDL:
+         dprintf(fd, "HIDL Health HAL V2.0");
+	 break;
+     default:
+         break;
+  };
+  dprintf(fd, "\n");
+  dprintf(fd, "Impl library handle: %p\n", handle);
+
+  return STATUS_OK;
 }
 
 using ::android::hardware::interfacesEqual;
