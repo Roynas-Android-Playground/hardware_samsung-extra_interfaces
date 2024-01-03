@@ -343,6 +343,7 @@ int main(int argc, const char** argv) {
     return EXIT_FAILURE;
   }
   auto kLogDir = fs::path(kLogRoot);
+  umask(022);
 
   if (getenv("LOGGER_MODE_SYSTEM") != NULL) {
      ALOGI("Running in system log mode");
