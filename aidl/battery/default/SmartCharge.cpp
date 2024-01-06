@@ -397,12 +397,12 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
 binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* numArgs */) {
   auto tryLockFn = [](std::mutex& m) {
      const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
-     return lk.owns_lock();
+     return !lk.owns_lock();
   };
 
   dprintf(fd, "Loop thread running: %d\n", kRunning.load());
   if (kRunning) {
-     dprintf(fd, "Loop thread charge control state\n");
+     dprintf(fd, "Loop thread charge control state: ");
      switch (status) {
         case ChargeStatus::ON:
             dprintf(fd, "ON");
