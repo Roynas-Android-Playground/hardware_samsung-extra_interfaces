@@ -213,16 +213,9 @@ SmartCharge::SmartCharge(void) {
   }
 }
 
-enum ChargeStatus {
-  ON,
-  OFF,
-  NOOP,
-};
-
 void SmartCharge::startLoop(bool withrestart) {
-  ChargeStatus tmp;
+  ChargeStatus current, policy;
   bool initdone = false;
-  status = ChargeStatus::NOOP;
 
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
@@ -231,25 +224,69 @@ void SmartCharge::startLoop(bool withrestart) {
 
     switch (healthState) {
     case USE_HEALTH_AIDL: {
+      using android::hardware::health::BatteryStatus;
 
       ScopedLock _(hal_health_lock);
+      BatteryStatus status_aidl = BatteryStatus::UNKNOWN;
       auto ret = health_aidl->getCapacity(&per);
       if (!ret.isOk()) {
 	per = ret.getStatus();
+        break;
       }
+      ret = health_aidl->getChargeStatus(&status_aidl);
+      if (!ret.isOk()) {
+	per = ret.getStatus();
+        break;
+      }
+      switch (status_aidl) {
+      case BatteryStatus::CHARGING:
+      case BatteryStatus::FULL:
+        current = ChargeStatus::ON;
+        break;
+      case BatteryStatus::DISCHARGING:
+//    case BatteryStatus::NOT_CHARGING:
+        current = ChargeStatus::OFF;
+	break;
+      default:
+        break;
+      };
       break;
     }
     case USE_HEALTH_HIDL: {
       using ::android::hardware::health::V2_0::Result;
+      using ::android::hardware::health::V1_0::BatteryStatus;
 
       ScopedLock _(hal_health_lock);
       Result res = Result::UNKNOWN;
+      BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
       health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
         res = hal_res;
         per = hal_value;
       });
-      if (res != Result::SUCCESS)
+      if (res != Result::SUCCESS) {
         per = -(static_cast<int>(res));
+        break;
+      }
+      health_hidl->getChargeStatus([&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
+        res = hal_res;
+        status_hidl = hal_value;
+      });
+      if (res != Result::SUCCESS) {
+        per = -(static_cast<int>(res));
+        break;
+      }
+      switch (status_hidl) {
+      case BatteryStatus::CHARGING:
+      case BatteryStatus::FULL:
+        current = ChargeStatus::ON;
+        break;
+      case BatteryStatus::DISCHARGING:
+//    case BatteryStatus::NOT_CHARGING:
+        current = ChargeStatus::OFF;
+        break;
+      default:
+        break;
+      };
       break;
     }
     default:
@@ -262,15 +299,16 @@ void SmartCharge::startLoop(bool withrestart) {
       break;
     }
     if (per > upper)
-      tmp = ChargeStatus::OFF;
+      policy = ChargeStatus::OFF;
     else if (withrestart && per < lower)
-      tmp = ChargeStatus::ON;
+      policy = ChargeStatus::ON;
     else if (!withrestart && per <= upper - 1)
-      tmp = ChargeStatus::ON;
+      policy = ChargeStatus::ON;
     else
-      tmp = ChargeStatus::NOOP;
-    if (tmp != status || !initdone) {
-      switch (tmp) {
+      policy = ChargeStatus::NOOP;
+    if (current != policy || !initdone) {
+      ALOGD("%s: Updating current, current %d, policy %d", __func__, current, policy);
+      switch (policy) {
       case ChargeStatus::OFF:
         setChargableFunc(false);
         break;
@@ -280,7 +318,7 @@ void SmartCharge::startLoop(bool withrestart) {
       default:
         break;
       }
-      status = tmp;
+      status = policy;
       initdone = true;
     }
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
@@ -288,7 +326,6 @@ void SmartCharge::startLoop(bool withrestart) {
       break;
     }
   }
-  lock.unlock();
   ALOGD("%s: --", __func__);
 }
 
