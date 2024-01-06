@@ -13,4 +13,6 @@ __BEGIN_DECLS
  */
 extern void setChargable(const bool enable);
 
+#define MODULE_SYM_NAME "setChargable"
+
 __END_DECLS

@@ -5,6 +5,7 @@
  */
 
 #include "SmartCharge.h"
+#include "modules/include/battery.h"
 
 #include <GetServiceSupport.h>
 #include <SafeStoi.h>
@@ -169,12 +170,12 @@ void SmartCharge::loadImplLibrary(void) {
   handle = dlopen(path.c_str(), RTLD_NOW);
   if (handle) {
     setChargableFunc = reinterpret_cast<void(*)(const bool)>(
-        dlsym(handle, "setChargable"));
+        dlsym(handle, MODULE_SYM_NAME));
 
     if (setChargableFunc) {
-      ALOGD("%s: setChargable function loaded", __func__);
+      ALOGD("%s: " MODULE_SYM_NAME " function loaded", __func__);
     } else {
-      ALOGE("%s: Failed to find setChargable symbol", __func__);
+      ALOGE("%s: Failed to find " MODULE_SYM_NAME " symbol", __func__);
       // Unused handle, close it
       dlclose(handle);
     }
@@ -395,6 +396,8 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
 }
 
 binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* numArgs */) {
+  Dl_info info;
+  void *addr;
   auto tryLockFn = [](std::mutex& m) {
      const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
      return !lk.owns_lock();
@@ -428,8 +431,10 @@ binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* n
          break;
   };
   dprintf(fd, "\n");
-  dprintf(fd, "Impl library handle: %p\n", handle);
-
+  addr = dlsym(handle, MODULE_SYM_NAME);
+  if (dladdr(addr, &info) != 0) {
+     dprintf(fd, "Impl library path: %s\n", info.dli_fname);
+  }
   return STATUS_OK;
 }
 
