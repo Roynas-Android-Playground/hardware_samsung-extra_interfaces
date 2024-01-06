@@ -81,7 +81,6 @@ class SmartCharge : public BnSmartCharge {
   enum ChargeStatus {
       ON,
       OFF,
-      NOOP,
   } status;
 
   bool loadAndParseConfigProp();

@@ -215,7 +215,7 @@ SmartCharge::SmartCharge(void) {
 
 void SmartCharge::startLoop(bool withrestart) {
   ChargeStatus current, policy;
-  bool initdone = false;
+  bool skip = false;
 
   ALOGD("%s: ++", __func__);
   std::unique_lock<std::mutex> lock(kCVLock);
@@ -305,8 +305,9 @@ void SmartCharge::startLoop(bool withrestart) {
     else if (!withrestart && per <= upper - 1)
       policy = ChargeStatus::ON;
     else
-      policy = ChargeStatus::NOOP;
-    if (current != policy || !initdone) {
+      skip = true;
+
+    if (current != policy && !skip) {
       ALOGD("%s: Updating current, current %d, policy %d", __func__, current, policy);
       switch (policy) {
       case ChargeStatus::OFF:
@@ -319,8 +320,8 @@ void SmartCharge::startLoop(bool withrestart) {
         break;
       }
       status = policy;
-      initdone = true;
     }
+    skip = false;
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
       // cv signaled, exit now
       break;
@@ -408,9 +409,6 @@ binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* n
             break;
         case ChargeStatus::OFF:
             dprintf(fd, "OFF");
-            break;
-        case ChargeStatus::NOOP:
-            dprintf(fd, "NOOP");
             break;
      }
      dprintf(fd, "\n");
