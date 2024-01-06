@@ -146,8 +146,8 @@ bool SmartCharge::loadAndParseConfigProp(void) {
     lower = ret.first;
     ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
   } else {
-    upper = -1;
-    lower = -1;
+    upper = kInvalidCfg;
+    lower = kInvalidCfg;
     ALOGW("%s: Parsing config failed", __func__);
     return false;
   }
