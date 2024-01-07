@@ -28,7 +28,6 @@ namespace battery {
 
 using ::android::base::GetProperty;
 using ::android::base::SetProperty;
-using ::android::base::WaitForPropertyCreation;
 
 using ScopedLock = const std::lock_guard<std::mutex>;
 
@@ -46,7 +45,7 @@ using is_integral_or_bool =
     std::enable_if_t<std::is_integral_v<T> || std::is_same_v<T, bool>, bool>;
 
 static inline bool isValidBool(const int val) {
-  return val == true || val == false;
+  return val == !!val;
 }
 static inline bool verifyConfig(const int lower, const int upper) {
   return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
@@ -89,11 +88,9 @@ bool fromString(const std::string &v, ConfigPair<bool> *pair) {
 
 template <typename U>
 bool getAndParse(const char *prop, ConfigPair<U> *pair) {
-  if (WaitForPropertyCreation(prop, 500ms)) {
-    std::string propval = GetProperty(prop, "");
-    if (!propval.empty()) {
-      return fromString(propval, pair);
-    }
+  std::string propval = GetProperty(prop, "");
+  if (!propval.empty()) {
+     return fromString(propval, pair);
   }
   return false;
 }
@@ -123,7 +120,6 @@ void SmartCharge::loadHealthImpl(void) {
       reason = ret.description();
     } else {
       LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
-      __builtin_unreachable();
     }
   } else {
     healthState = USE_HEALTH_AIDL;
@@ -245,7 +241,7 @@ void SmartCharge::startLoop(bool withrestart) {
         current = ChargeStatus::ON;
         break;
       case BatteryStatus::DISCHARGING:
-//    case BatteryStatus::NOT_CHARGING:
+      case BatteryStatus::NOT_CHARGING:
         current = ChargeStatus::OFF;
 	break;
       default:
@@ -282,7 +278,7 @@ void SmartCharge::startLoop(bool withrestart) {
         current = ChargeStatus::ON;
         break;
       case BatteryStatus::DISCHARGING:
-//    case BatteryStatus::NOT_CHARGING:
+      case BatteryStatus::NOT_CHARGING:
         current = ChargeStatus::OFF;
         break;
       default:
@@ -294,7 +290,6 @@ void SmartCharge::startLoop(bool withrestart) {
       __builtin_unreachable();
     }
     if (per < 0) {
-      kRunning = false;
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
       ALOGE("%s: exit loop: retval: %d", __func__, per);
       break;
@@ -303,7 +298,7 @@ void SmartCharge::startLoop(bool withrestart) {
       policy = ChargeStatus::OFF;
     else if (withrestart && per < lower)
       policy = ChargeStatus::ON;
-    else if (!withrestart && per <= upper - 1)
+    else if (!withrestart && per < upper)
       policy = ChargeStatus::ON;
     else
       skip = true;
