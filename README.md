@@ -7,7 +7,7 @@ Sub directory  | Description
 `aidl/battery/default`         | AIDL Smartcharge HAL Implementation, frozen as vendor.samsung_ext.framework.battery-V1
 `aidl/battery/test_client`     | Client to the AIDL Smartcharge HAL, for testing and debugging
 `aidl/flashlight/default`      | AIDL Flashlight Brightness Controller HAL Implementation, frozen as vendor.samsung_ext.hardware.camera.flashlight-V1
-`aidl/battery/test_client`     | Client to the AIDL Flashlight Brightness Controller HAL, for testing and debugging
+`aidl/flashlight/test_client`  | Client to the AIDL Flashlight Brightness Controller HAL, for testing and debugging
 `aidl/light_ext/default`       | AIDL Light HAL Implementation with 'Sunlight' mode vendor extension, frozen as vendor.samsung_ext.hardware.light-V1, based on android.hardware.light-service.samsung (BROKEN)
 `aidl/light_ext/test_client`   | Client to the AIDL Light HAL with vendor extension, for testing and debugging
 `app/FlashControl`             | Client to the AIDL Flashlight Brightness Controller HAL, actual user frontend app providing the UI for configuring flashlight brightness scale
