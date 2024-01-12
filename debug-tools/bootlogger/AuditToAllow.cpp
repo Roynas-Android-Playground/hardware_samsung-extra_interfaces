@@ -177,29 +177,31 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
   return true;
 }
 
-bool writeAllowRules(const AvcContext &ctx, std::string &out) {
+void writeAllowRules(const AvcContexts &ctxs, std::vector<std::string> &out) {
   std::stringstream ss;
 
-  if (!ctx.stale) {
-    ss << "allow " << TrimSEContext(ctx.scontext) << ' '
-       << TrimSEContext(ctx.tcontext) << ':' << ctx.tclass << ' ';
-    switch (ctx.operation.size()) {
-      case 0: {
-        return false;
-      }
-      case 1: {
-        ss << ctx.operation.front();
-      } break;
-      default: {
-        ss << '{' << ' ';
-        for (const auto &op : ctx.operation)
-          ss << op << ' ';
-        ss << '}';
-      } break;
-    };
-    ss << ';' << std::endl;
-    out.append(ss.str());
-    return true;
+  for (const auto& ctx : ctxs) {
+    if (!ctx.stale) {
+      ss << "allow " << TrimSEContext(ctx.scontext) << ' '
+         << TrimSEContext(ctx.tcontext) << ':' << ctx.tclass << ' ';
+      switch (ctx.operation.size()) {
+        case 0: {
+          continue;
+        }
+        case 1: {
+          ss << ctx.operation.front();
+        } break;
+        default: {
+          ss << '{' << ' ';
+          for (const auto &op : ctx.operation)
+            ss << op << ' ';
+          ss << '}';
+        } break;
+      };
+      ss << ';';
+      out.emplace_back(ss.str());
+      std::stringstream ss2;
+      ss.swap(ss2);
+    }
   }
-  return false;
 }

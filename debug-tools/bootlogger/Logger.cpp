@@ -439,18 +439,16 @@ int main(int argc, const char** argv) {
 
   if (kAvcCtx) {
     std::vector<std::string> allowrules;
-    OutputContext seGenCtx(kLogDir, "sepolicy.gen.txt");
+    OutputContext seGenCtx(kLogDir, "sepolicy.gen");
+    seGenCtx.openOutput();
+
     for (auto& e1 : *kAvcCtx) {
       for (auto& e2 : *kAvcCtx) {
         if (&e1 == &e2) continue;
         e1 += e2;
       }
     }
-    for (const auto& e : *kAvcCtx) {
-      std::string line;
-      writeAllowRules(e, line);
-      allowrules.emplace_back(line);
-    }
+    writeAllowRules(*kAvcCtx, allowrules);
     eraseDuplicates(allowrules);
     for (const auto& l : allowrules)
       seGenCtx.writeToOutput(l);

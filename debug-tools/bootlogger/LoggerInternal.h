@@ -97,8 +97,8 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec);
  * writeAllowRules - generate a selinux allowlist from AvcContext
  * Note - new line terminated
  *
- * @param ctx context to generate rules from
- * @param out std::string buffer containing the rules
+ * @param ctx contexts to generate rules from
+ * @param out std::vector buffer containing the rules
  * @return true on success
  */
-bool writeAllowRules(const AvcContext &ctx, std::string &out);
+void writeAllowRules(const AvcContexts &ctxs, std::vector<std::string>& out);
