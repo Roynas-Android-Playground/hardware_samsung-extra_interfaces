@@ -319,8 +319,8 @@ void SmartCharge::startLoop(bool withrestart) {
     }
     skip = false;
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
-      // cv signaled, exit now
-      break;
+      // cv signaled, exit now if kRunning is false
+      if (!kRunning) break;
     }
   }
   ALOGD("%s: --", __func__);
@@ -376,12 +376,12 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
     setChargableFunc(true);
     if (kRunning) {
       ScopedLock _(thread_lock);
+      kRunning = false;
       if (kLoopThread->joinable()) {
         cv.notify_one();
         kLoopThread->join();
       }
       kLoopThread.reset();
-      kRunning = false;
     } else {
       ALOGW("No threads to stop?");
     }
