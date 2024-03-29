@@ -19,7 +19,6 @@ package com.royna.flashcontrol
 import android.os.Bundle
 
 import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity
-import com.android.settingslib.widget.R
 
 class FlashActivity : CollapsingToolbarBaseActivity() {
     private var mInstance : FlashFragment? = null
@@ -27,7 +26,7 @@ class FlashActivity : CollapsingToolbarBaseActivity() {
         super.onCreate(savedInstanceState)
         if (mInstance == null) mInstance = FlashFragment()
         supportFragmentManager.beginTransaction().replace(
-                R.id.content_frame,
+                com.android.settingslib.collapsingtoolbar.R.id.content_frame,
                 mInstance!!
         ).commit()
     }

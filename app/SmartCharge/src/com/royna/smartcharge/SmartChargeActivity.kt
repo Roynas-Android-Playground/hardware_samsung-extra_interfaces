@@ -19,7 +19,6 @@ package com.royna.smartcharge
 import android.os.Bundle
 
 import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity
-import com.android.settingslib.widget.R
 
 class SmartChargeActivity : CollapsingToolbarBaseActivity() {
     private var mInstance : SmartChargeFragment? = null
@@ -27,7 +26,7 @@ class SmartChargeActivity : CollapsingToolbarBaseActivity() {
         super.onCreate(savedInstanceState)
         if (mInstance == null) mInstance = SmartChargeFragment()
         supportFragmentManager.beginTransaction().replace(
-            R.id.content_frame,
+            com.android.settingslib.collapsingtoolbar.R.id.content_frame,
             mInstance!!
         ).commit()
     }

@@ -27,15 +27,15 @@ import android.os.ServiceManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
-import android.widget.Switch
+import android.widget.CompoundButton
+import android.widget.CompoundButton.OnCheckedChangeListener
 
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
 
 import com.android.settingslib.widget.MainSwitchPreference
-import com.android.settingslib.widget.OnMainSwitchChangeListener
-import com.android.settingslib.widget.RadioButtonPreference
+import com.android.settingslib.widget.SelectorWithWidgetPreference
 
 import java.lang.IllegalStateException
 
@@ -43,7 +43,7 @@ import com.royna.flashcontrol.R
 
 import vendor.samsung_ext.hardware.camera.flashlight.IFlashlight
 
-class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
+class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
 
     private lateinit var switchBar: MainSwitchPreference
     private val mService : IFlashlight? = IFlashlight.Stub.asInterface(ServiceManager.waitForDeclaredService("vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"))
@@ -66,7 +66,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         val mSavedIntesity = mSharedPreferences.getInt(PREF_FLASH_INTESITY, 1)
 
         for ((key, value) in PREF_FLASH_MODES) {
-            val preference = findPreference<RadioButtonPreference>(key)!!
+            val preference = findPreference<SelectorWithWidgetPreference>(key)!!
             preference.isChecked = value == mSavedIntesity
             preference.isEnabled = switchBar.isChecked
             preference.setOnPreferenceClickListener {
@@ -125,17 +125,17 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
     }
 
-    override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
+    override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
         if (mService == null) {
             Log.e(TAG, "mService is null...")
-            switchView.setChecked(false)
+            buttonView.setChecked(false)
             return
         }
         try {
             mService.enableFlash(isChecked)
         } catch (e : IllegalStateException) {
             Log.w(TAG, "enableFlash() failed")
-            switchView.setChecked(false)
+            buttonView.setChecked(false)
             return
         }
 	val kBright = mService.getCurrentBrightness()
@@ -147,7 +147,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
 
     private fun changeRadioButtons(enable: Boolean) {
         for ((key, _) in PREF_FLASH_MODES) {
-            val mPreference = findPreference<RadioButtonPreference>(key)!!
+            val mPreference = findPreference<SelectorWithWidgetPreference>(key)!!
             mPreference.isEnabled = enable
         }
     }
@@ -163,7 +163,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         }
         mService.setBrightness(intesity)
         for ((key, value) in PREF_FLASH_MODES) {
-            val preference = findPreference<RadioButtonPreference>(key)!!
+            val preference = findPreference<SelectorWithWidgetPreference>(key)!!
             preference.isChecked = value == intesity
         }
         mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()

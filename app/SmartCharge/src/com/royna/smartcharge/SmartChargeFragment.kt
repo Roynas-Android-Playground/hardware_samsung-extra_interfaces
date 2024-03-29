@@ -23,7 +23,8 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ServiceManager
 import android.util.Log
-import android.widget.Switch
+import android.widget.CompoundButton
+import android.widget.CompoundButton.OnCheckedChangeListener
 import android.widget.Toast
 
 import androidx.preference.Preference
@@ -33,7 +34,6 @@ import androidx.preference.SeekBarPreference
 import androidx.preference.SwitchPreference
 
 import com.android.settingslib.widget.MainSwitchPreference
-import com.android.settingslib.widget.OnMainSwitchChangeListener
 
 import com.royna.smartcharge.R
 
@@ -42,7 +42,7 @@ import vendor.samsung_ext.framework.battery.ISmartCharge
 import java.lang.IllegalArgumentException
 import java.lang.IllegalStateException
 
-class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
+class SmartChargeFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
     private lateinit var mMainSwitch : MainSwitchPreference
     private lateinit var mStopBar : SeekBarPreference
     private lateinit var mRestartBar : SeekBarPreference
@@ -138,7 +138,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
         }
     }
 
-    override fun onSwitchChanged(switchView: Switch, isChecked: Boolean) {
+    override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
         runCatching {
             if (isChecked) { when (mConfig) {
                 Config.STOP_RESTART -> {
@@ -162,7 +162,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListen
                 is IllegalStateException -> {
                     // Config error...
                     mMainHandler.post {
-                        switchView.isChecked = false
+                        mMainSwitch.isChecked = false
                         Toast.makeText(requireContext(),
                             R.string.smart_charge_invalid_config, Toast.LENGTH_SHORT).show()
                     }
