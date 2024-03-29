@@ -21,23 +21,23 @@
 
     <PreferenceCategory
         android:title="@string/flash_intesities_category">
-        <com.android.settingslib.widget.RadioButtonPreference
+        <com.android.settingslib.widget.SelectorWithWidgetPreference
             android:key="flash_intesity_1"
             android:title="@string/flash_intesity_1" />
 
-        <com.android.settingslib.widget.RadioButtonPreference
+        <com.android.settingslib.widget.SelectorWithWidgetPreference
             android:key="flash_intesity_2"
             android:title="@string/flash_intesity_2" />
 
-        <com.android.settingslib.widget.RadioButtonPreference
+        <com.android.settingslib.widget.SelectorWithWidgetPreference
             android:key="flash_intesity_3"
             android:title="@string/flash_intesity_3" />
 
-        <com.android.settingslib.widget.RadioButtonPreference
+        <com.android.settingslib.widget.SelectorWithWidgetPreference
             android:key="flash_intesity_4"
             android:title="@string/flash_intesity_4" />
 
-        <com.android.settingslib.widget.RadioButtonPreference
+        <com.android.settingslib.widget.SelectorWithWidgetPreference
             android:key="flash_intesity_5"
             android:title="@string/flash_intesity_5" />
 
