@@ -11,7 +11,7 @@ cc_binary {
         "libbase",
         "libbinder_ndk",
         "libsafestoi",
-        "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
+        "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk_platform",
     ],
     system_ext_specific: true,
 }

@@ -100,31 +100,16 @@ void SmartCharge::loadHealthImpl(void) {
   std::string reason;
   ScopedLock _(hal_health_lock);
 
-  // Try aidl
-  health_aidl = waitServiceDefault<IHealthAIDL>();
-  if (health_aidl == nullptr) {
-    // hidl
-    health_hidl = ::android::hardware::health::V2_0::get_health_service();
-    if (health_hidl != nullptr) {
-      healthState = USE_HEALTH_HIDL;
-      ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
-      hidl_death_recp = new hidl_health_death_recipient(health_hidl);
-      auto ret = health_hidl->linkToDeath(hidl_death_recp,
-                                          reinterpret_cast<uint64_t>(this));
-      linkToDeathSuccess = ret.isOk();
-      reason = ret.description();
-    } else {
-      LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
-    }
+  health_hidl = ::android::hardware::health::V2_0::get_health_service();
+  if (health_hidl != nullptr) {
+    ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
+    hidl_death_recp = new hidl_health_death_recipient(health_hidl);
+    auto ret = health_hidl->linkToDeath(hidl_death_recp,
+                                        reinterpret_cast<uint64_t>(this));
+    linkToDeathSuccess = ret.isOk();
+    reason = ret.description();
   } else {
-    healthState = USE_HEALTH_AIDL;
-    ALOGD("%s: Connected to health AIDL HAL", __func__);
-    aidl_death_recp = ndk::ScopedAIBinder_DeathRecipient(
-        AIBinder_DeathRecipient_new(onServiceDied));
-    auto ret = AIBinder_linkToDeath(health_aidl->asBinder().get(),
-                                    aidl_death_recp.get(), this);
-    linkToDeathSuccess = ret == STATUS_OK;
-    reason = ndk::ScopedAStatus(AStatus_fromStatus(ret)).getDescription();
+    LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
   }
   if (!linkToDeathSuccess)
     ALOGW("%s: linkToDeath failed: %s", __func__, reason.c_str());
@@ -193,77 +178,41 @@ void SmartCharge::startLoop(bool withrestart) {
   while (true) {
     int per;
 
-    switch (healthState) {
-    case USE_HEALTH_AIDL: {
-      using android::hardware::health::BatteryStatus;
+    using ::android::hardware::health::V1_0::BatteryStatus;
+    using ::android::hardware::health::V2_0::Result;
 
-      ScopedLock _(hal_health_lock);
-      BatteryStatus status_aidl = BatteryStatus::UNKNOWN;
-      auto ret = health_aidl->getCapacity(&per);
-      if (!ret.isOk()) {
-        per = ret.getStatus();
-        break;
-      }
-      ret = health_aidl->getChargeStatus(&status_aidl);
-      if (!ret.isOk()) {
-        per = ret.getStatus();
-        break;
-      }
-      switch (status_aidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-        break;
-      default:
-        break;
-      };
+    ScopedLock _(hal_health_lock);
+    Result res = Result::UNKNOWN;
+    BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
+    health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
+      res = hal_res;
+      per = hal_value;
+    });
+    if (res != Result::SUCCESS) {
+      per = -(static_cast<int>(res));
       break;
     }
-    case USE_HEALTH_HIDL: {
-      using ::android::hardware::health::V1_0::BatteryStatus;
-      using ::android::hardware::health::V2_0::Result;
-
-      ScopedLock _(hal_health_lock);
-      Result res = Result::UNKNOWN;
-      BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
-      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
-        res = hal_res;
-        per = hal_value;
-      });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      health_hidl->getChargeStatus(
-          [&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
-            res = hal_res;
-            status_hidl = hal_value;
-          });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      switch (status_hidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-        break;
-      default:
-        break;
-      };
+    health_hidl->getChargeStatus(
+        [&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
+          res = hal_res;
+          status_hidl = hal_value;
+        });
+    if (res != Result::SUCCESS) {
+      per = -(static_cast<int>(res));
       break;
     }
+    switch (status_hidl) {
+    case BatteryStatus::CHARGING:
+    case BatteryStatus::FULL:
+      current = ChargeStatus::ON;
+      break;
+    case BatteryStatus::DISCHARGING:
+    case BatteryStatus::NOT_CHARGING:
+      current = ChargeStatus::OFF;
+      break;
     default:
-      __builtin_unreachable();
-    }
+      break;
+    };
     if (per < 0) {
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
       ALOGE("%s: exit loop: retval: %d", __func__, per);
@@ -393,16 +342,7 @@ binder_status_t SmartCharge::dump(int fd, const char ** /* args */,
   dprintf(fd, "Mutex locked (config/thread/cv) %d %d %d\n",
           tryLockFn(config_lock), tryLockFn(thread_lock), tryLockFn(kCVLock));
   dprintf(fd, "Connected Health HAL: ");
-  switch (healthState) {
-  case USE_HEALTH_AIDL:
-    dprintf(fd, "AIDL Health HAL V1");
-    break;
-  case USE_HEALTH_HIDL:
-    dprintf(fd, "HIDL Health HAL V2.0");
-    break;
-  default:
-    break;
-  };
+  dprintf(fd, "HIDL Health HAL V2.0");
   dprintf(fd, "\n");
   return STATUS_OK;
 }
