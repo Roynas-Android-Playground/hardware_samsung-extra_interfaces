@@ -7,7 +7,6 @@
 #pragma once
 
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
-#include <aidl/android/hardware/health/BnHealth.h>
 #include <healthhalutils/HealthHalUtils.h>
 
 #include <dlfcn.h>
@@ -23,7 +22,6 @@ using android::hardware::health::V2_0::IHealth;
 using android::hardware::hidl_death_recipient;
 using android::sp;
 using android::wp;
-using IHealthAIDL = aidl::android::hardware::health::IHealth;
 
 namespace aidl {
 namespace vendor {
@@ -67,16 +65,8 @@ class SmartCharge : public BnSmartCharge {
 
   sp<IHealth> health_hidl;
   sp<hidl_death_recipient> hidl_death_recp;
-  std::shared_ptr<IHealthAIDL> health_aidl;
-  ndk::ScopedAIBinder_DeathRecipient aidl_death_recp;
   // Protect health_hal pointers
   std::mutex hal_health_lock;
-
-  enum {
-      UNKNOWN,
-      USE_HEALTH_AIDL,
-      USE_HEALTH_HIDL,
-  } healthState = UNKNOWN;
 
   enum ChargeStatus {
       ON,

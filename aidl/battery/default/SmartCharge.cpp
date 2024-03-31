@@ -44,15 +44,12 @@ template <typename T>
 using is_integral_or_bool =
     std::enable_if_t<std::is_integral_v<T> || std::is_same_v<T, bool>, bool>;
 
-static inline bool isValidBool(const int val) {
-  return val == !!val;
-}
+static inline bool isValidBool(const int val) { return val == !!val; }
 static inline bool verifyConfig(const int lower, const int upper) {
   return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
 }
 
-template <typename T, is_integral_or_bool<T> = true>
-struct ConfigPair {
+template <typename T, is_integral_or_bool<T> = true> struct ConfigPair {
   T first, second;
   std::string toString(void) {
     return std::to_string(first) + kComma + std::to_string(second);
@@ -74,8 +71,7 @@ bool fromString(const std::string &v, ConfigPair<U> *pair) {
   return false;
 }
 
-template <>
-bool fromString(const std::string &v, ConfigPair<bool> *pair) {
+template <> bool fromString(const std::string &v, ConfigPair<bool> *pair) {
   ConfigPair<int> tmp{};
   if (fromString<int>(v, &tmp) && isValidBool(tmp.first) &&
       isValidBool(tmp.second)) {
@@ -86,11 +82,10 @@ bool fromString(const std::string &v, ConfigPair<bool> *pair) {
   return false;
 }
 
-template <typename U>
-bool getAndParse(const char *prop, ConfigPair<U> *pair) {
+template <typename U> bool getAndParse(const char *prop, ConfigPair<U> *pair) {
   std::string propval = GetProperty(prop, "");
   if (!propval.empty()) {
-     return fromString(propval, pair);
+    return fromString(propval, pair);
   }
   return false;
 }
@@ -106,30 +101,17 @@ void SmartCharge::loadHealthImpl(void) {
   std::string reason;
   ScopedLock _(hal_health_lock);
 
-  // Try aidl
-  health_aidl = waitServiceDefault<IHealthAIDL>();
-  if (health_aidl == nullptr) {
-    // hidl
-    health_hidl = ::android::hardware::health::V2_0::get_health_service();
-    if (health_hidl != nullptr) {
-      healthState = USE_HEALTH_HIDL;
-      ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
-      hidl_death_recp = new hidl_health_death_recipient(health_hidl);
-      auto ret = health_hidl->linkToDeath(hidl_death_recp, reinterpret_cast<uint64_t>(this));
-      linkToDeathSuccess = ret.isOk();
-      reason = ret.description();
-    } else {
-      LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
-    }
+  // hidl
+  health_hidl = ::android::hardware::health::V2_0::get_health_service();
+  if (health_hidl != nullptr) {
+    ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
+    hidl_death_recp = new hidl_health_death_recipient(health_hidl);
+    auto ret = health_hidl->linkToDeath(hidl_death_recp,
+                                        reinterpret_cast<uint64_t>(this));
+    linkToDeathSuccess = ret.isOk();
+    reason = ret.description();
   } else {
-    healthState = USE_HEALTH_AIDL;
-    ALOGD("%s: Connected to health AIDL HAL", __func__);
-    aidl_death_recp = ndk::ScopedAIBinder_DeathRecipient(
-        AIBinder_DeathRecipient_new(onServiceDied)
-    );
-    auto ret = AIBinder_linkToDeath(health_aidl->asBinder().get(), aidl_death_recp.get(), this);
-    linkToDeathSuccess = ret == STATUS_OK;
-    reason = ndk::ScopedAStatus(AStatus_fromStatus(ret)).getDescription();
+    LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
   }
   if (!linkToDeathSuccess)
     ALOGW("%s: linkToDeath failed: %s", __func__, reason.c_str());
@@ -158,15 +140,15 @@ bool SmartCharge::loadAndParseConfigProp(void) {
 #endif
 
 void SmartCharge::loadImplLibrary(void) {
-  const static std::string filename = "battery." +
-    GetProperty(kSmartChargeOverrideProp, "default") + ".so";
+  const static std::string filename =
+      "battery." + GetProperty(kSmartChargeOverrideProp, "default") + ".so";
   const static std::string path = LIB_PATH + filename;
 
   ALOGI("%s: Try dlopen '%s'", __func__, path.c_str());
   handle = dlopen(path.c_str(), RTLD_NOW);
   if (handle) {
-    setChargableFunc = reinterpret_cast<void(*)(const bool)>(
-        dlsym(handle, MODULE_SYM_NAME));
+    setChargableFunc =
+        reinterpret_cast<void (*)(const bool)>(dlsym(handle, MODULE_SYM_NAME));
 
     if (setChargableFunc) {
       ALOGD("%s: " MODULE_SYM_NAME " function loaded", __func__);
@@ -179,7 +161,7 @@ void SmartCharge::loadImplLibrary(void) {
     ALOGE("%s: %s", __func__, dlerror() ?: "unknown");
   }
   if (!setChargableFunc) {
-    setChargableFunc = [] (const bool) {};
+    setChargableFunc = [](const bool) {};
   }
 }
 
@@ -219,76 +201,41 @@ void SmartCharge::startLoop(bool withrestart) {
   while (true) {
     int per;
 
-    switch (healthState) {
-    case USE_HEALTH_AIDL: {
-      using android::hardware::health::BatteryStatus;
+    using ::android::hardware::health::V1_0::BatteryStatus;
+    using ::android::hardware::health::V2_0::Result;
 
-      ScopedLock _(hal_health_lock);
-      BatteryStatus status_aidl = BatteryStatus::UNKNOWN;
-      auto ret = health_aidl->getCapacity(&per);
-      if (!ret.isOk()) {
-	per = ret.getStatus();
-        break;
-      }
-      ret = health_aidl->getChargeStatus(&status_aidl);
-      if (!ret.isOk()) {
-	per = ret.getStatus();
-        break;
-      }
-      switch (status_aidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-	break;
-      default:
-        break;
-      };
+    ScopedLock _(hal_health_lock);
+    Result res = Result::UNKNOWN;
+    BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
+    health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
+      res = hal_res;
+      per = hal_value;
+    });
+    if (res != Result::SUCCESS) {
+      per = -(static_cast<int>(res));
       break;
     }
-    case USE_HEALTH_HIDL: {
-      using ::android::hardware::health::V2_0::Result;
-      using ::android::hardware::health::V1_0::BatteryStatus;
-
-      ScopedLock _(hal_health_lock);
-      Result res = Result::UNKNOWN;
-      BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
-      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
-        res = hal_res;
-        per = hal_value;
-      });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      health_hidl->getChargeStatus([&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
-        res = hal_res;
-        status_hidl = hal_value;
-      });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      switch (status_hidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-        break;
-      default:
-        break;
-      };
+    health_hidl->getChargeStatus(
+        [&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
+          res = hal_res;
+          status_hidl = hal_value;
+        });
+    if (res != Result::SUCCESS) {
+      per = -(static_cast<int>(res));
       break;
     }
+    switch (status_hidl) {
+    case BatteryStatus::CHARGING:
+    case BatteryStatus::FULL:
+      current = ChargeStatus::ON;
+      break;
+    case BatteryStatus::DISCHARGING:
+    case BatteryStatus::NOT_CHARGING:
+      current = ChargeStatus::OFF;
+      break;
     default:
-      __builtin_unreachable();
-    }
+      break;
+    };
     if (per < 0) {
       SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
       ALOGE("%s: exit loop: retval: %d", __func__, per);
@@ -304,7 +251,8 @@ void SmartCharge::startLoop(bool withrestart) {
       skip = true;
 
     if (current != policy && !skip) {
-      ALOGD("%s: Updating current, current %d, policy %d", __func__, current, policy);
+      ALOGD("%s: Updating current, current %d, policy %d", __func__, current,
+            policy);
       switch (policy) {
       case ChargeStatus::OFF:
         setChargableFunc(false);
@@ -320,7 +268,8 @@ void SmartCharge::startLoop(bool withrestart) {
     skip = false;
     if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
       // cv signaled, exit now if kRunning is false
-      if (!kRunning) break;
+      if (!kRunning)
+        break;
     }
   }
   ALOGD("%s: --", __func__);
@@ -329,12 +278,14 @@ void SmartCharge::startLoop(bool withrestart) {
 void SmartCharge::createLoopThread(bool restart) {
   ScopedLock _(thread_lock);
   ALOGD("%s: create thread", __func__);
-  kLoopThread = std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
+  kLoopThread =
+      std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
   kRunning = true;
 }
 
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
-  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_, kRunning.load());
+  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_,
+        kRunning.load());
   if (!verifyConfig(lower_, upper_))
     return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
   if (kRunning)
@@ -390,56 +341,48 @@ ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
   return ndk::ScopedAStatus::ok();
 }
 
-binder_status_t SmartCharge::dump(int fd, const char** /* args */, uint32_t /* numArgs */) {
+binder_status_t SmartCharge::dump(int fd, const char ** /* args */,
+                                  uint32_t /* numArgs */) {
   Dl_info info;
   void *addr;
-  auto tryLockFn = [](std::mutex& m) {
-     const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
-     return !lk.owns_lock();
+  auto tryLockFn = [](std::mutex &m) {
+    const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
+    return !lk.owns_lock();
   };
 
   dprintf(fd, "Loop thread running: %d\n", kRunning.load());
   if (kRunning) {
-     dprintf(fd, "Loop thread charge control state: ");
-     switch (status) {
-        case ChargeStatus::ON:
-            dprintf(fd, "ON");
-            break;
-        case ChargeStatus::OFF:
-            dprintf(fd, "OFF");
-            break;
-     }
-     dprintf(fd, "\n");
+    dprintf(fd, "Loop thread charge control state: ");
+    switch (status) {
+    case ChargeStatus::ON:
+      dprintf(fd, "ON");
+      break;
+    case ChargeStatus::OFF:
+      dprintf(fd, "OFF");
+      break;
+    }
+    dprintf(fd, "\n");
   }
   dprintf(fd, "Configuration (upper/lower): %d %d\n", upper, lower);
-  dprintf(fd, "Mutex locked (config/thread/cv) %d %d %d\n", tryLockFn(config_lock),
-     tryLockFn(thread_lock), tryLockFn(kCVLock));
+  dprintf(fd, "Mutex locked (config/thread/cv) %d %d %d\n",
+          tryLockFn(config_lock), tryLockFn(thread_lock), tryLockFn(kCVLock));
   dprintf(fd, "Connected Health HAL: ");
-  switch (healthState) {
-     case USE_HEALTH_AIDL:
-         dprintf(fd, "AIDL Health HAL V1");
-	 break;
-     case USE_HEALTH_HIDL:
-         dprintf(fd, "HIDL Health HAL V2.0");
-	 break;
-     default:
-         break;
-  };
+  dprintf(fd, "HIDL Health HAL V2.0");
   dprintf(fd, "\n");
   addr = dlsym(handle, MODULE_SYM_NAME);
   if (dladdr(addr, &info) != 0) {
-     dprintf(fd, "Impl library path: %s\n", info.dli_fname);
+    dprintf(fd, "Impl library path: %s\n", info.dli_fname);
   }
   return STATUS_OK;
 }
 
 using ::android::hardware::interfacesEqual;
 
-void hidl_health_death_recipient::serviceDied(uint64_t cookie,
-                                              const wp<::android::hidl::base::V1_0::IBase>& who) {
-    if (mHealth != nullptr && interfacesEqual(mHealth, who.promote())) {
-        onServiceDied(reinterpret_cast<void*>(cookie));
-    }
+void hidl_health_death_recipient::serviceDied(
+    uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase> &who) {
+  if (mHealth != nullptr && interfacesEqual(mHealth, who.promote())) {
+    onServiceDied(reinterpret_cast<void *>(cookie));
+  }
 }
 
 } // namespace battery
