@@ -10,6 +10,7 @@ cc_binary {
     init_rc: ["vendor.samsung_ext.framework.battery-service.rc"],
     vintf_fragments: ["vendor.samsung_ext.framework.battery-service.xml"],
     srcs: [
+        "JSONParser.cpp",
         "SmartCharge.cpp",
         "service.cpp",
     ],
@@ -21,11 +22,19 @@ cc_binary {
         "liblog",
         "libutils",
         "libsafestoi",
+        "libjsoncpp",
         "android.hardware.health@2.0",
         "android.hardware.health-V1-ndk",
         "vendor.samsung_ext.framework.battery-V1-ndk",
     ],
     whole_static_libs: ["libhealthhalutils"],
     system_ext_specific: true,
-    required: ["battery.default"],
+    required: ["smartcharge_nodes_json"],
+}
+
+prebuilt_etc {
+    name: "smartcharge_nodes_json",
+    src: "smartcharge_nodes.json",
+    filename_from_src: true,
+    system_ext_specific: true,
 }

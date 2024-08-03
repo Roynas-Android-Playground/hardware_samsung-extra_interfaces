@@ -2,5 +2,3 @@ persist.ext.                    u:object_r:ext_prop:s0
 persist.ext.smartcharge.        u:object_r:ext_smartcharge_prop:s0
 persist.ext.flashlight.         u:object_r:ext_flashlight_prop:s0
 persist.ext.logdump.            u:object_r:ext_logger_prop:s0
-
-ro.hardware.battery             u:object_r:exported_default_prop:s0 exact string

@@ -1,0 +1,35 @@
+[
+    {
+        "codename": "tb128fu",
+        "vendor": "lenovo",
+        "actions": [
+            {
+                "action": "enable",
+                "node": "/sys/class/power_supply/battery/StartCharging_Test",
+                "handler": "OpenFile"
+            },
+            {
+                "action": "disable",
+                "node": "/sys/class/power_supply/battery/StopCharging_Test",
+                "handler": "OpenFile"
+            }
+        ]
+    },
+    {
+        "vendor": "samsung",
+        "actions": [
+            {
+                "action": "enable",
+                "node": "/sys/class/power_supply/battery/batt_slate_mode",
+                "handler": "WriteFile",
+                "handler_data": "0"
+            },
+            {
+                "action": "disable",
+                "node": "/sys/class/power_supply/battery/batt_slate_mode",
+                "handler": "WriteFile",
+                "handler_data": "1"
+            }
+        ]
+    }
+]

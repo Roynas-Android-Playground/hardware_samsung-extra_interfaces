@@ -10,8 +10,6 @@
 #include <aidl/android/hardware/health/BnHealth.h>
 #include <healthhalutils/HealthHalUtils.h>
 
-#include <dlfcn.h>
-
 #include <atomic>
 #include <condition_variable>
 #include <functional>
@@ -62,7 +60,6 @@ class SmartCharge : public BnSmartCharge {
   // Used by above condition_variable
   std::mutex kCVLock;
 
-  void* handle;
   std::function<void(const bool)> setChargableFunc;
 
   sp<IHealth> health_hidl;
@@ -84,7 +81,7 @@ class SmartCharge : public BnSmartCharge {
   } status;
 
   bool loadAndParseConfigProp();
-  void loadImplLibrary();
+  void loadConfiguration();
   void loadEnabledAndStart();
 
 public:
