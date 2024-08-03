@@ -1,3 +1,5 @@
+#define LOG_TAG "SmartChargeSvc::JSONParser"
+
 #include "JSONParser.hpp"
 #include <android-base/logging.h>
 
