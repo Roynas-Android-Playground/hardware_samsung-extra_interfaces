@@ -12,7 +12,9 @@
 
 using ::aidl::vendor::samsung_ext::framework::battery::SmartCharge;
 
-int main() {
+int main(int argc, char **argv) {
+  android::base::InitLogging(argv);
+ 
   ABinderProcess_setThreadPoolMaxThreadCount(8);
   ABinderProcess_startThreadPool();
   std::shared_ptr<SmartCharge> smartcharge =
