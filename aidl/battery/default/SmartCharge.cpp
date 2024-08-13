@@ -403,6 +403,7 @@ binder_status_t SmartCharge::dump(int fd, const char ** /* args */,
   default:
     break;
   };
+  dprintf(fd, "\n");
   return STATUS_OK;
 }
 
