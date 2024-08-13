@@ -61,7 +61,10 @@ class FlashFragment : PreferenceFragmentCompat(), OnMainSwitchChangeListener {
         val mBrightness = try {
             mService!!.getCurrentBrightness()
         } catch (e : Exception) {
-            if (e is IllegalStateException || e is NullPointerException) {
+            if (e is NullPointerException) {
+                 0
+            } else if (e is IllegalStateException) {
+                 Log.e(TAG, "IllegalStateException on getCurrentBrightness", e)
                  0
             } else {
                  throw e // rethrow if it's not one of the expected exceptions
