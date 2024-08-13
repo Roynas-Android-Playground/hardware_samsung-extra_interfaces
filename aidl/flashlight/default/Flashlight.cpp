@@ -56,8 +56,11 @@ ndk::ScopedAStatus Flashlight::getCurrentBrightness(int32_t* _aidl_return) {
 	    case 1007 ... 1009:
 		    *_aidl_return = 5;
 		    break;
-	    default:
-		    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+	    default: {
+		    char debugBuffer[50] = {};
+		    snprintf(debugBuffer, sizeof(debugBuffer) - 1, "Unknown flash node value: %d", intvalue);
+		    return ndk::ScopedAStatus::fromExceptionCodeWithMessage(EX_ILLEGAL_STATE, debugBuffer);
+            }
     }
     return ndk::ScopedAStatus::ok();
 }
