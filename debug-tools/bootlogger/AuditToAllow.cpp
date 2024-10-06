@@ -1,4 +1,3 @@
-#include <array>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -6,72 +5,9 @@
 
 #include "LoggerInternal.h"
 
-// Import class-permissions mapping from linux kernel header
-struct security_class_mapping {
-  std::string name;
-  std::array<std::string, sizeof(unsigned) * 8 + 1> perms;
-};
+namespace {
 
-#pragma push_macro("NULL")
-#define NULL "__unused__" // Kill null terminator
-// Linux 6.7-rc4
-#include "linux/classmap.h"
-#pragma pop_macro("NULL")
-
-#define COMMON_ANDROID_IPC_PERMS  "add", "find", "list"
-
-struct security_class_mapping secclass_map_ext[] {
-    { "service_manager",
-	  { COMMON_ANDROID_IPC_PERMS }
-    },
-    { "hwservice_manager",
-	  { COMMON_ANDROID_IPC_PERMS }
-    },
-    { "property_service",
-	  { "set" }
-    },
-};
-
-enum class MapVerifyResult {
-    OK = 0,
-    INAPPROPRIATE_PERMISSION,
-    TCLASS_NOT_FOUND,
-};
-
-static MapVerifyResult verifyOneMappingTable(const security_class_mapping map[], const size_t size,
-                                  const std::string& tclass, const OperationVec& perms) {
-    auto ret = MapVerifyResult::TCLASS_NOT_FOUND;
-    for (int i = 0; i < size; ++i) {
-        auto it = map[i];
-        if (it.name == tclass) {
-            for (const auto& perm : perms) {
-                if (std::find(it.perms.begin(), it.perms.end(), perm) == it.perms.end()) {
-                    ALOGE("Invalid permission '%s' for tclass '%s'", perm.c_str(), tclass.c_str());
-                    ret = MapVerifyResult::INAPPROPRIATE_PERMISSION;
-                    return ret;
-                }
-            }
-            ret = MapVerifyResult::OK;
-            break;
-        }
-    }
-    return ret;
-}
-static bool isVaildPermission(const std::string& tclass, const std::vector<std::string>& perms) {
-    bool ret = false;
-    // If ret is smaller than INAPPROPRIATE_PERMISSION, means tclass existed on the map
-    // One of two maps should return true to pass the check.
-    ret |= verifyOneMappingTable(secclass_map, sizeof(secclass_map) / sizeof(security_class_mapping),
-                                 tclass, perms) <= MapVerifyResult::INAPPROPRIATE_PERMISSION;
-    ret |= verifyOneMappingTable(secclass_map_ext, sizeof(secclass_map_ext) / sizeof(security_class_mapping),
-                                 tclass, perms) <= MapVerifyResult::INAPPROPRIATE_PERMISSION;
-    if (!ret) {
-        ALOGE("Invalid tclass: '%s'", tclass.c_str());
-    }
-    return ret;
-}
-
-static inline std::string TrimDoubleQuote(const std::string &str) {
+inline std::string TrimDoubleQuote(const std::string &str) {
   if (str.size() > 2) { // At least one character inside quotes
     if (str.front() == '"' && str.back() == '"') {
       return str.substr(1, str.size() - 2);
@@ -80,64 +16,49 @@ static inline std::string TrimDoubleQuote(const std::string &str) {
   return str;
 }
 
-// Trim u:object_r, :s0...
-static inline std::string TrimSEContext(const std::string &str) {
-  const static std::regex kSEContextRegex(R"(^u:(object_)?r:\w+:s0(.+)?$)");
-  if (std::regex_match(str, kSEContextRegex,
+} // namespace
+
+SEContext::SEContext(std::string context) : m_context(std::move(context)) {
+  const static std::regex kSEContextRegex(
+      R"(^u:(object_)?r:([\w-]+):s0(.+)?$)");
+
+  std::smatch match;
+  if (std::regex_match(m_context, match, kSEContextRegex,
                        std::regex_constants::format_sed)) {
-    auto begin_pos = str.find_first_of('r') + 2; // Skip 'r:' so add 2
-    auto end_pos = str.find_first_of(':', begin_pos + 1);
-    return str.substr(begin_pos, end_pos - begin_pos);
+    m_context = match.str(2);
   }
-  return str;
 }
 
-static bool findOrDie(std::string &dest, AttributeMap &map,
-                      const std::string &key) {
-  auto it = map.find(key);
-  bool ret = it != map.end();
-
-  if (ret) {
-    dest = it->second;
-    map.erase(it);
-  } else {
-    ALOGE("Empty value for key: '%s'", key.c_str());
-  }
-  return ret;
-}
-
-bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
-  std::string line, sub_str = str.substr(str.find("avc:"));
-  std::istringstream iss(sub_str);
+AvcContext::AvcContext(const std::string_view string) : stale(true) {
+  std::string line;
   std::vector<std::string> lines;
-  decltype(lines)::iterator it;
-  AttributeMap attributes;
-  AvcContext ctx;
   bool ret = true;
 
+  const std::string sub_str = std::string(string.substr(string.find("avc:")));
+  std::istringstream iss(sub_str);
   while ((iss >> line)) {
     lines.emplace_back(line);
   }
-  it = lines.begin();
+  auto it = lines.begin();
   ++it; // Skip avc:
   if (*it == "granted") {
-    ctx.granted = true;
+    granted = true;
   } else if (*it == "denied") {
-    ctx.granted = false;
+    granted = false;
   } else {
     ALOGW("Unknown value for ACL status: '%s'", it->c_str());
-    return false;
+    return;
   }
   ++it; // Now move onto next
   ++it; // Skip opening bracelet
   do {
-    ctx.operation.emplace_back(*it);
+    operation.insert(*it);
   } while (*(++it) != "}");
   ++it; // Skip ending bracelet
   ++it; // Skip 'for'
   if (it == lines.end()) {
-    ALOGE("Invalid input: '%s'", str.c_str());
-    return false;
+    ALOGE("Invalid input: '%s'", string.data());
+    return;
   }
   do {
     auto idx = it->find('=');
@@ -145,63 +66,120 @@ bool parseOneAvcContext(const std::string &str, AvcContexts &outvec) {
       ALOGW("Unparsable attribute: '%s'", it->c_str());
       continue;
     }
-    attributes.emplace(it->substr(0, idx),
-                       TrimDoubleQuote(it->substr(idx + 1)));
+    misc_attributes.emplace(it->substr(0, idx),
+                            TrimDoubleQuote(it->substr(idx + 1)));
   } while (++it != lines.end());
 
   // Bitwise AND, ret will be set to 0 if any of the calls return false(0)
-  decltype(attributes)::iterator pit = attributes.find("permissive");
-  ret &= findOrDie(ctx.scontext, attributes, "scontext");
-  ret &= findOrDie(ctx.tcontext, attributes, "tcontext");
-  ret &= findOrDie(ctx.tclass, attributes, "tclass");
-  ret &= pit != attributes.end();
+  auto pit = misc_attributes.find("permissive");
+  ret &= findOrDie(scontext, "scontext");
+  ret &= findOrDie(tcontext, "tcontext");
+  ret &= findOrDie(tclass, "tclass");
+  ret &= pit != misc_attributes.end();
   // If still vaild
   if (ret) {
-    auto permissive = pit->second.empty() ? '\0' : pit->second[0];
-    ret &= (permissive == '0' || permissive == '1');
-    if (ret) {
-      ctx.permissive = permissive - '0';
-      attributes.erase(pit);
-    } else {
-      ALOGE("Invalid permissive status: '%c'", permissive);
+    bool found = false;
+    int x = 0;
+    if (std::stringstream(pit->second) >> x) {
+      if (x == 0 || x == 1) {
+        permissive = x;
+        misc_attributes.erase(pit);
+        found = true;
+      }
+    }
+    if (!found) {
+      ALOGE("Invalid permissive status: '%s'", pit->second.c_str());
+      ret = false;
     }
   }
-  if (!ctx.tclass.empty())
-      ret &= isVaildPermission(ctx.tclass, ctx.operation);
-  if (!ret) {
+  if (ret) {
+    stale = false;
+  } else {
     ALOGE("Failed to parse '%s'", sub_str.c_str());
-    return false;
   }
-  ctx.misc_attributes = attributes;
-  outvec.emplace_back(ctx);
-  return true;
 }
 
-void writeAllowRules(const AvcContexts &ctxs, std::vector<std::string> &out) {
-  std::stringstream ss;
+bool AvcContext::findOrDie(std::string &dest, const std::string &key) {
+  auto it = misc_attributes.find(key);
+  bool ret = it != misc_attributes.end();
 
-  for (const auto& ctx : ctxs) {
-    if (!ctx.stale) {
-      ss << "allow " << TrimSEContext(ctx.scontext) << ' '
-         << TrimSEContext(ctx.tcontext) << ':' << ctx.tclass << ' ';
-      switch (ctx.operation.size()) {
-        case 0: {
-          continue;
-        }
-        case 1: {
-          ss << ctx.operation.front();
-        } break;
-        default: {
-          ss << '{' << ' ';
-          for (const auto &op : ctx.operation)
-            ss << op << ' ';
-          ss << '}';
-        } break;
-      };
-      ss << ';';
-      out.emplace_back(ss.str());
-      std::stringstream ss2;
-      ss.swap(ss2);
+  if (ret) {
+    dest = it->second;
+    misc_attributes.erase(it);
+  } else {
+    ALOGE("Empty value for key: '%s'", key.c_str());
+  }
+  return ret;
+}
+
+bool AvcContext::findOrDie(SEContext &dest, const std::string &key) {
+  std::string value;
+  if (findOrDie(value, key)) {
+    dest = SEContext(value);
+    return true;
+  }
+  return false;
+}
+
+AvcContext &AvcContext::operator+=(AvcContext &other) {
+  if (!stale && !other.stale) {
+    bool mergable = true;
+    mergable &= granted == other.granted;
+    mergable &= scontext == other.scontext;
+    mergable &= tcontext == other.tcontext;
+    mergable &= tclass == other.tclass;
+    // TODO: Check for misc_attributes?
+    if (mergable) {
+      other.stale = true;
+      operation.insert(other.operation.begin(), other.operation.end());
     }
   }
+  return *this;
+}
+
+std::ostream &operator<<(std::ostream &self, const AvcContext &context) {
+  if (context.stale || context.operation.size() == 0) {
+    return self;
+  }
+  // BEGIN HOOKS (Some hardcoded blockings), TODO: Init script?
+  if (context.operation.find("sys_admin") != context.operation.end()) {
+    return self;
+  }
+  // END HOOKS
+  self << "allow " << context.scontext << ' ' << context.tcontext << ':'
+       << context.tclass << ' ';
+  switch (context.operation.size()) {
+  case 1: {
+    self << *context.operation.begin();
+  } break;
+  default: {
+    self << '{' << ' ';
+    for (const auto &op : context.operation) {
+      self << op << ' ';
+    }
+    self << '}';
+  } break;
+  };
+  self << ';';
+  return self;
+}
+
+std::ostream &operator<<(std::ostream &self, const AvcContexts &context) {
+  std::stringstream ss;
+  std::set<std::string> rules;
+  for (const auto &entry : context) {
+    ss << entry << std::endl;
+    rules.insert(ss.str());
+    std::stringstream ss2;
+    ss.swap(ss2);
+  }
+  for (const auto &entry : rules) {
+    self << entry;
+  }
+  return self;
+}
+
+std::ostream &operator<<(std::ostream &self, const SEContext &context) {
+  self << static_cast<std::string>(context);
+  return self;
 }

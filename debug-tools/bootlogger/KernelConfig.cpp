@@ -1,34 +1,30 @@
+#include <string_view>
 #include <sys/stat.h>
 #include <zlib.h>
 
+#include <array>
 #include <cstdio>
 #include <regex>
 #include <sstream>
 #include <string>
-#include <unordered_map>
 
 #include "LoggerInternal.h"
 
-size_t getPageSize() {
-  static size_t pagesize = sysconf(_SC_PAGESIZE);
-  return pagesize;
-}
-
-static constexpr char kProcConfigGz[] = "/proc/config.gz";
+static constexpr std::string_view kProcConfigGz = "/proc/config.gz";
 
 static int ReadConfigGz(std::string &out) {
-  char buf[BUF_SIZE];
-  size_t len;
-  gzFile f = gzopen(kProcConfigGz, "rb");
+  std::array<char, BUF_SIZE> buf{};
+  size_t len = 0;
+  gzFile f = gzopen(kProcConfigGz.data(), "rb");
   if (f == nullptr) {
     PLOGE("gzopen");
     return -errno;
   }
-  while ((len = gzread(f, buf, sizeof(buf)))) {
-    out.append(buf, len);
+  while ((len = gzread(f, buf.data(), buf.size())) != 0u) {
+    out.append(buf.data(), len);
   }
   if (len < 0) {
-    int errnum;
+    int errnum = 0;
     const char *errmsg = gzerror(f, &errnum);
     ALOGE("Could not read %s, %s", kProcConfigGz, errmsg);
     return (errnum == Z_ERRNO ? -errno : errnum);
@@ -37,7 +33,8 @@ static int ReadConfigGz(std::string &out) {
   return 0;
 }
 
-static bool parseOneConfigLine(const std::string &line, KernelConfig_t &outvec) {
+static bool parseOneConfigLine(const std::string &line,
+                               KernelConfigType &outvec) {
   static const std::regex kDisabledConfig(R"(^#\sCONFIG_\w+ is not set$)");
   static const std::regex kEnabledConfig(R"(^CONFIG_\w+=(y|m|(")?(.+)?(")?)$)");
   static const auto flags = std::regex_constants::format_sed;
@@ -49,22 +46,22 @@ static bool parseOneConfigLine(const std::string &line, KernelConfig_t &outvec) 
   if (ret) {
     char c = line[line.find('=') + 1];
     switch (c) {
-      case 'y':
-        value = ConfigValue::BUILT_IN;
-        break;
-      case 'm':
-        value = ConfigValue::MODULE;
-        break;
-      case '"':
-        value = ConfigValue::STRING;
-        break;
-      case '-':  // Minus
-      case '0' ... '9':
-        value = ConfigValue::INT;
-        break;
-      default:
-        ALOGW("Unknown config value: %c", c);
-        return ret;
+    case 'y':
+      value = ConfigValue::BUILT_IN;
+      break;
+    case 'm':
+      value = ConfigValue::MODULE;
+      break;
+    case '"':
+      value = ConfigValue::STRING;
+      break;
+    case '-': // Minus
+    case '0' ... '9':
+      value = ConfigValue::INT;
+      break;
+    default:
+      ALOGW("Unknown config value: %c", c);
+      return ret;
     };
   } else {
     ret = std::regex_match(line, kDisabledConfig, flags);
@@ -85,38 +82,39 @@ static bool parseOneConfigLine(const std::string &line, KernelConfig_t &outvec) 
   }
   // Trim out CONFIG_* part
   switch (value) {
-    case BUILT_IN:
-    case MODULE:
-    case STRING:
-    case INT:
-      // CONFIG_AAA=y
-      // = symbol being the delimiter
-      config = line.substr(0, line.find_first_of('='));
-      break;
-    case UNSET:
-      // # CONFIG_AAA is not set
-      // Space after AAA being the delimiter.
-      // '# ', size 2
-      config = line.substr(2);
-      config = config.substr(0, config.find_first_of(' '));
-      break;
-    case UNKNOWN:
-      __builtin_unreachable();
-      break;
+  case BUILT_IN:
+  case MODULE:
+  case STRING:
+  case INT:
+    // CONFIG_AAA=y
+    // = symbol being the delimiter
+    config = line.substr(0, line.find_first_of('='));
+    break;
+  case UNSET:
+    // # CONFIG_AAA is not set
+    // Space after AAA being the delimiter.
+    // '# ', size 2
+    config = line.substr(2);
+    config = config.substr(0, config.find_first_of(' '));
+    break;
+  case UNKNOWN:
+    break;
   }
 
   outvec.emplace(config, value);
   return ret;
 }
 
-int ReadKernelConfig(KernelConfig_t &out) {
+int ReadKernelConfig(KernelConfigType &out) {
   struct stat statbuf {};
-  std::string buf, line;
+  std::string buf;
+  std::string line;
   std::stringstream ss;
-  int rc = 0, lines = 0;
+  int rc = 0;
+  int lines = 0;
 
   // Determine config.gz size
-  rc = stat(kProcConfigGz, &statbuf);
+  rc = stat(kProcConfigGz.data(), &statbuf);
   if (rc < 0) {
     PLOGE("stat");
     return -errno;
@@ -131,8 +129,11 @@ int ReadKernelConfig(KernelConfig_t &out) {
   // Clear if there was anything
   out.clear();
   // Determine map size by newlines
-  for (const char c : buf)
-    if (c == '\n') lines++;
+  for (const char c : buf) {
+    if (c == '\n') {
+      lines++;
+    }
+  }
   // Avoid unnessary reallocs (Kernel configurations are a lot)
   out.reserve(lines);
   // Parse line by line
