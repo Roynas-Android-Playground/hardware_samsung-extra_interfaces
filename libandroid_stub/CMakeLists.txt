@@ -1,0 +1,2 @@
+add_library(libAndroidStub INTERFACE)
+target_include_directories(libAndroidStub INTERFACE include)
