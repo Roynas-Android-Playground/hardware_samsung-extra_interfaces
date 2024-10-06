@@ -200,7 +200,7 @@ private:
 
 public:
   LoggerContext(decltype(_fp) fp, const fs::path &logDir, std::string name)
-      : OutputContext(logDir, name), _fp(std::move(fp)), name(std::move(name)) {
+      : OutputContext(logDir, name), name(std::move(name)), _fp(std::move(fp)) {
   }
   using FileHandle = decltype(_fp);
 };
@@ -222,7 +222,7 @@ struct AvcFilterContext : LogFilterContext {
   std::shared_ptr<AvcContexts> _ctx;
   std::mutex &_lock;
   AvcFilterContext(std::shared_ptr<AvcContexts> ctx, std::mutex &lock)
-      : LogFilterContext("avc"), _ctx(ctx), _lock(lock) {}
+      : LogFilterContext("avc"), _ctx(std::move(ctx)), _lock(lock) {}
   AvcFilterContext() = delete;
   ~AvcFilterContext() override = default;
 };
