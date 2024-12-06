@@ -48,7 +48,7 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
     private lateinit var switchBar: MainSwitchPreference
     private val mService : IFlashlight? = IFlashlight.Stub.asInterface(ServiceManager.waitForDeclaredService("vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"))
     private lateinit var mSharedPreferences : SharedPreferences
-    private lateinit var mCurrentIntesity : Preference
+    private lateinit var mCurrentIntensity : Preference
     private lateinit var mCurrentOn: Preference
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -74,31 +74,31 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
         switchBar.isChecked = mBrightness != 0
         switchBar.isEnabled = mSettingBrightness == 0
 
-        val mSavedIntesity = mSharedPreferences.getInt(PREF_FLASH_INTESITY, 1)
+        val mSavedIntensity = mSharedPreferences.getInt(PREF_FLASH_INTENSITY, 1)
 
         for ((key, value) in PREF_FLASH_MODES) {
             val preference = findPreference<SelectorWithWidgetPreference>(key)!!
-            preference.isChecked = value == mSavedIntesity
+            preference.isChecked = value == mSavedIntensity
             preference.isEnabled = switchBar.isChecked
             preference.setOnPreferenceClickListener {
-                setIntesity(value)
-                mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, value).apply()
+                setIntensity(value)
+                mSharedPreferences.edit().putInt(PREF_FLASH_INTENSITY, value).apply()
                 true
             }
         }
         mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
-        mCurrentIntesity = findPreference<Preference>(PREF_FLASH_CURRENT_INTESITY)!!
+        mCurrentIntensity = findPreference<Preference>(PREF_FLASH_CURRENT_INTENSITY)!!
         requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
     }
 
-    private fun changeIntesityView(b: Int) { mCurrentIntesity.title = String.format(requireContext().getString(R.string.flash_current_intesity), b) }
+    private fun changeIntensityView(b: Int) { mCurrentIntensity.title = String.format(requireContext().getString(R.string.flash_current_intensity), b) }
     private fun changeOnOffView(b: Boolean) { mCurrentOn.title = String.format(requireContext().getString(R.string.flash_current_on), requireContext().getString(if (b) R.string.on else R.string.off)) }
     private fun getSettingFlash() = Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
 
     override fun onResume() {
         super.onResume()
         val mBrightness = mService?.getCurrentBrightness() ?: 0
-	changeIntesityView(mBrightness)
+	changeIntensityView(mBrightness)
 	changeOnOffView(mBrightness != 0)
 	val isSettingOn = getSettingFlash() != 0
 	if (!isSettingOn) {
@@ -151,8 +151,8 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
         }
 	val kBright = mService.getCurrentBrightness()
         changeOnOffView(isChecked)
-        changeIntesityView(kBright)
-	setIntesity(kBright)
+        changeIntensityView(kBright)
+	setIntensity(kBright)
         changeRadioButtons(isChecked)
     }
 
@@ -163,22 +163,22 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
         }
     }
             
-    private fun setIntesity(intesity: Int) {
-        if (intesity < 1 || intesity > 5) {
-           Log.e(TAG, "Invalid intesity $intesity")
+    private fun setIntensity(intensity: Int) {
+        if (intensity < 1 || intensity > 5) {
+           Log.e(TAG, "Invalid intensity $intensity")
            return
         }
         if (mService == null) {
            Log.e(TAG, "mService is null...")
            return
         }
-        mService.setBrightness(intesity)
+        mService.setBrightness(intensity)
         for ((key, value) in PREF_FLASH_MODES) {
             val preference = findPreference<SelectorWithWidgetPreference>(key)!!
-            preference.isChecked = value == intesity
+            preference.isChecked = value == intensity
         }
-        mSharedPreferences.edit().putInt(PREF_FLASH_INTESITY, intesity).apply()
-        changeIntesityView(mService.getCurrentBrightness())
+        mSharedPreferences.edit().putInt(PREF_FLASH_INTENSITY, intensity).apply()
+        changeIntensityView(mService.getCurrentBrightness())
     }
 
     override fun onPause() {
@@ -204,15 +204,15 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
 
     companion object {
         private const val PREF_FLASH_ENABLE = "flash_enable"
-        const val PREF_FLASH_INTESITY = "flash_intesity"
+        const val PREF_FLASH_INTENSITY = "flash_intensity"
         private const val PREF_FLASH_CURRENT_ON = "flash_current_on"
-        private const val PREF_FLASH_CURRENT_INTESITY = "flash_current_intesity"
+        private const val PREF_FLASH_CURRENT_INTENSITY = "flash_current_intensity"
         val PREF_FLASH_MODES = mapOf(
-                "flash_intesity_1" to 1,
-                "flash_intesity_2" to 2,
-                "flash_intesity_3" to 3,
-                "flash_intesity_4" to 4,
-                "flash_intesity_5" to 5,
+                "flash_intensity_1" to 1,
+                "flash_intensity_2" to 2,
+                "flash_intensity_3" to 3,
+                "flash_intensity_4" to 4,
+                "flash_intensity_5" to 5,
         )
         private const val TAG = "FlashCtrl"
         val mFlashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)

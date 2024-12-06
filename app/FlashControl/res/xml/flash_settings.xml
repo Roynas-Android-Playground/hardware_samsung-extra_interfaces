@@ -11,7 +11,7 @@
     <PreferenceCategory
         android:title="@string/flash_status_category">
         <Preference
-            android:key="flash_current_intesity"
+            android:key="flash_current_intensity"
             android:selectable="false"/>
 
         <Preference
@@ -22,24 +22,24 @@
     <PreferenceCategory
         android:title="@string/flash_intesities_category">
         <com.android.settingslib.widget.SelectorWithWidgetPreference
-            android:key="flash_intesity_1"
-            android:title="@string/flash_intesity_1" />
+            android:key="flash_intensity_1"
+            android:title="@string/flash_intensity_1" />
 
         <com.android.settingslib.widget.SelectorWithWidgetPreference
-            android:key="flash_intesity_2"
-            android:title="@string/flash_intesity_2" />
+            android:key="flash_intensity_2"
+            android:title="@string/flash_intensity_2" />
 
         <com.android.settingslib.widget.SelectorWithWidgetPreference
-            android:key="flash_intesity_3"
-            android:title="@string/flash_intesity_3" />
+            android:key="flash_intensity_3"
+            android:title="@string/flash_intensity_3" />
 
         <com.android.settingslib.widget.SelectorWithWidgetPreference
-            android:key="flash_intesity_4"
-            android:title="@string/flash_intesity_4" />
+            android:key="flash_intensity_4"
+            android:title="@string/flash_intensity_4" />
 
         <com.android.settingslib.widget.SelectorWithWidgetPreference
-            android:key="flash_intesity_5"
-            android:title="@string/flash_intesity_5" />
+            android:key="flash_intensity_5"
+            android:title="@string/flash_intensity_5" />
 
         <com.android.settingslib.widget.FooterPreference
             android:key="flash_footer"
