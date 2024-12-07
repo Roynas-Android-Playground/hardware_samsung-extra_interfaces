@@ -148,7 +148,7 @@ struct FilterAvcGen : Filter {
       fmt::print("Failed to open file: {}\n", file.string());
       return false;
     }
-    fileStream << contexts;
+    fileStream << fmt::format("{}\n", contexts);
     fileStream.close();
     return true;
   }

@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
 #include <cstring>
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <set>
 #include <string>
 #include <string_view>
@@ -70,5 +73,45 @@ private:
   bool findOrDie(SEContext &dest, const std::string &key);
 };
 
-extern std::ostream &operator<<(std::ostream &self, const AvcContext &context);
-extern std::ostream &operator<<(std::ostream &self, const AvcContexts &context);
+template <> struct fmt::formatter<SEContext> : formatter<string_view> {
+  // parse is inherited from formatter<string_view>.
+  auto format(const SEContext &context,
+              format_context &ctx) const -> format_context::iterator {
+    return formatter<string_view>::format(static_cast<std::string>(context),
+                                          ctx);
+  }
+};
+
+template <> struct fmt::formatter<AvcContext> : formatter<string_view> {
+  // parse is inherited from formatter<string_view>.
+  static auto format(const AvcContext &context,
+                     format_context &ctx) -> format_context::iterator {
+
+    auto prefix = fmt::format("allow {} {}:{} ", context.scontext,
+                              context.tcontext, context.tclass);
+    switch (context.operation.size()) {
+    case 1: {
+      return fmt::format_to(ctx.out(), "{} {};", prefix,
+                            *context.operation.begin());
+    }
+    default: {
+      return fmt::format_to(ctx.out(), "{} {{ {} }};", prefix,
+                            fmt::join(context.operation, " "));
+    }
+    };
+  }
+};
+
+template <> struct fmt::formatter<AvcContexts> : formatter<string_view> {
+  // parse is inherited from formatter<string_view>.
+  static auto format(AvcContexts context,
+                     format_context &ctx) -> format_context::iterator {
+    AvcContexts filtered_contexts;
+    auto en =
+        std::remove_if(context.begin(), context.end(), [](const auto &context) {
+          return context.stale || context.operation.size() == 0;
+        });
+    filtered_contexts.insert(filtered_contexts.end(), en, context.end());
+    return fmt::format_to(ctx.out(), "{}", fmt::join(filtered_contexts, "\n"));
+  }
+};

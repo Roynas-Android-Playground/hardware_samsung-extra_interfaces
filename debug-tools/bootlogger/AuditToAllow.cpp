@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <regex>
@@ -30,14 +31,6 @@ SEContext::SEContext(std::string context) : m_context(std::move(context)) {
     m_context = match.str(2);
   }
 }
-
-template <> struct fmt::formatter<SEContext> : formatter<string_view> {
-  // parse is inherited from formatter<string_view>.
-  auto format(const SEContext &context,
-              format_context &ctx) const -> format_context::iterator {
-    return formatter<string_view>::format(static_cast<std::string>(context), ctx);
-  }
-};
 
 AvcContext::AvcContext(const std::string_view string) : stale(true) {
   std::string line;
@@ -145,42 +138,4 @@ AvcContext &AvcContext::operator+=(AvcContext &other) {
     }
   }
   return *this;
-}
-
-std::ostream &operator<<(std::ostream &self, const AvcContext &context) {
-  if (context.stale || context.operation.size() == 0) {
-    return self;
-  }
-  // BEGIN HOOKS (Some hardcoded blockings), TODO: Init script?
-  if (context.operation.find("sys_admin") != context.operation.end()) {
-    return self;
-  }
-  // END HOOKS
-  self << fmt::format("allow {} {}:{} ", context.scontext, context.tcontext,
-                      context.tclass);
-  switch (context.operation.size()) {
-  case 1: {
-    self << *context.operation.begin();
-  } break;
-  default: {
-    self << fmt::format("{{ {} }}", fmt::join(context.operation, " "));
-  } break;
-  };
-  self << ';';
-  return self;
-}
-
-std::ostream &operator<<(std::ostream &self, const AvcContexts &context) {
-  std::stringstream ss;
-  std::set<std::string> rules;
-  for (const auto &entry : context) {
-    ss << entry << std::endl;
-    rules.insert(ss.str());
-    std::stringstream ss2;
-    ss.swap(ss2);
-  }
-  for (const auto &entry : rules) {
-    self << entry;
-  }
-  return self;
 }
