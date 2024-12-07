@@ -19,13 +19,17 @@
 #include <android-base/properties.h>
 #include <cerrno>
 #include <chrono>
+#include <csignal>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
 #include <fmt/chrono.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
-#include <functional>
+#include <iomanip>
+#include <limits>
+#include <set>
 #include <string_view>
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
@@ -33,16 +37,17 @@
 #include <type_traits>
 #include <unistd.h>
 
+#include <array>
 #include <atomic>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <regex>
 #include <sstream>
 #include <string>
+#include <sys/wait.h>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -61,12 +66,69 @@ namespace fs = std::filesystem;
 
 struct Logcat {
   constexpr static std::string_view NAME = "logcat";
-  constexpr static std::string_view LOGC = "/system/bin/logcat";
-  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
+  constexpr static std::string_view LOGC = "logcat";
+  struct Data {
+    FILE *out_buf;
+    FILE *err_buf;
+    pid_t pid;
+  };
+  using HANDLE = std::unique_ptr<Data, void (*)(Data *)>;
 
-  static HANDLE open() { return {popen(LOGC.data(), "r"), &pclose}; }
-  static void close(HANDLE fp) {
-    // No-op
+  static HANDLE open() {
+    HANDLE empty{nullptr, +[](Data * /*file*/) {}};
+    std::array<int, 2> out_fds = {};
+    std::array<int, 2> err_fds = {};
+
+    if (pipe(out_fds.data()) || pipe(err_fds.data())) {
+      PLOG(ERROR) << "Failed to create pipe";
+      return empty;
+    }
+
+    pid_t pid = vfork();
+    if (pid < 0) {
+      PLOG(ERROR) << "Failed to fork";
+      return empty;
+    } else if (pid == 0) {
+      dup2(out_fds[1], STDOUT_FILENO);
+      dup2(err_fds[1], STDERR_FILENO);
+      ::close(out_fds[0]);
+      ::close(err_fds[0]);
+      execlp(LOGC.data(), LOGC.data(), nullptr);
+      _exit(std::numeric_limits<uint8_t>::max());
+    } else {
+      ::close(out_fds[1]);
+      ::close(err_fds[1]);
+      int status = 0;
+      if (waitpid(pid, &status, WNOHANG) != 0) {
+        LOG(ERROR) << "Proc early-exited with error code "
+                   << WEXITSTATUS(status);
+        return empty;
+      }
+      LOG(INFO) << "Forked exe " << std::quoted(LOGC) << " with pid: " << pid;
+      return {new Data{fdopen(out_fds[0], "r"), fdopen(err_fds[0], "r"), pid},
+              &close};
+    }
+  }
+  static void close(Data *data) {
+    ::kill(data->pid, SIGTERM);
+    ::waitpid(data->pid, nullptr, 0);
+    if (data->out_buf != nullptr) {
+      ::fflush(data->out_buf);
+      ::fclose(data->out_buf);
+    }
+    if (data->err_buf != nullptr) {
+      std::array<char, 64> errbuf{};
+      if (::fread(errbuf.data(), errbuf.size(), 1, data->err_buf) != 0) {
+        LOG(ERROR) << "standard error output" << errbuf.data();
+      }
+      ::fflush(data->err_buf);
+      ::fclose(data->err_buf);
+    }
+    delete data;
+  }
+  template <size_t size>
+  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
+    return ::fgets(data.data(), data.size(), handle->out_buf);
   }
 };
 
@@ -76,25 +138,24 @@ struct Dmesg {
   using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
 
   static HANDLE open() { return {fopen(FILEC.data(), "r"), &fclose}; }
-  static void close(HANDLE fp) {
-    // No-op
+  template <size_t size>
+  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
+    return ::fgets(data.data(), data.size(), handle.get());
   }
 };
 
 struct Filter {
   static bool write(const std::filesystem::path &file,
-                    const std::vector<std::string> &results) {
+                    const std::set<std::string> &results) {
     if (results.empty()) {
       return true;
     }
     std::ofstream fileStream(file);
     if (!fileStream.is_open()) {
-      fmt::print("Failed to open file: {}\n", file.string());
+      PLOG(ERROR) << "Failed to open file: " << file;
       return false;
     }
-    for (const auto &result : results) {
-      fileStream << result << '\n';
-    }
+    fileStream << fmt::format("{}", fmt::join(results, "\n"));
     fileStream.close();
     return true;
   }
@@ -122,7 +183,7 @@ struct FilterAvcGen : Filter {
     return !ctx.stale;
   }
   static bool write(const std::filesystem::path &file,
-                    const std::vector<std::string> &results) {
+                    const std::set<std::string> &results) {
     if (results.empty()) {
       return true;
     }
@@ -145,7 +206,7 @@ struct FilterAvcGen : Filter {
     // Write to file
     std::ofstream fileStream(file);
     if (!fileStream.is_open()) {
-      fmt::print("Failed to open file: {}\n", file.string());
+      PLOG(ERROR) << "Failed to open file: " << file;
       return false;
     }
     fileStream << fmt::format("{}\n", contexts);
@@ -168,12 +229,13 @@ struct FilterLibc : Filter {
     if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX,
                           std::regex_constants::format_sed)) {
       if (kPropMatch.size() == 3) {
-        fmt::print("Control message {} was unable to be set for {}\n",
-                   kPropMatch.str(1), kPropMatch.str(3));
+        LOG(INFO) << fmt::format(
+            "Control message {} was unable to be set for {}", kPropMatch.str(1),
+            kPropMatch.str(3));
         return true;
       } else if (kPropMatch.size() == 1) {
         const auto propString = kPropMatch.str(1);
-        fmt::print("Couldn't set prop {}\n", propString);
+        LOG(INFO) << fmt::format("Couldn't set prop {}", propString);
         if (propsDenied.find(propString) != propsDenied.end()) {
           return false;
         }
@@ -195,28 +257,25 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
   std::array<char, 512> buf = {0};
 
   // Open log source
-  auto _fp = Logger::open();
+  typename Logger::HANDLE _fp = Logger::open();
   if (_fp == nullptr) {
-    fmt::print("Failed to open file for logger {}: {}\n", Logger::NAME,
-               strerror(errno));
-    Logger::close(std::move(_fp));
+    LOG(ERROR) << "Failed to open source for logger " << Logger::NAME;
     return;
   }
 
   // Open log destination
-  std::filesystem::path logPath(directory /
-                                fmt::format("{}-{:%F-%T}.log", Logger::NAME,
-                                            std::chrono::system_clock::now()));
+  std::filesystem::path logPath(
+      directory / fmt::format("{}-{:%F-%H_%M_%S}.log", Logger::NAME,
+                              std::chrono::system_clock::now()));
   std::ofstream logFile(logPath);
   if (!logFile.is_open()) {
-    fmt::print("Failed to open file for logging: {}\n", logPath.string());
-    Logger::close(std::move(_fp));
+    PLOG(ERROR) << "Failed to open " << logPath << " for logging";
     return;
   }
 
-  std::tuple<std::pair<Filters, std::vector<std::string>>...> filters{};
+  std::tuple<std::pair<Filters, std::set<std::string>>...> filters{};
   while (*run) {
-    const char *ret = fgets(buf.data(), sizeof(buf), _fp.get());
+    const char *ret = Logger::fgets(buf, _fp);
     std::istringstream ss(buf.data());
     std::string line;
     if (ret == nullptr) {
@@ -228,7 +287,7 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
             (
                 [&] {
                   if (filter.first.filter(line)) {
-                    filter.second.emplace_back(line);
+                    filter.second.insert(line);
                   }
                 }(),
                 ...);
@@ -237,13 +296,13 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
       logFile << line << '\n';
     }
   }
-  Logger::close(std::move(_fp));
+  _fp.reset();
   logFile.close();
 
   std::error_code ec;
   if (std::filesystem::file_size(logPath, ec) == 0) {
     std::filesystem::remove(logPath, ec);
-    fmt::print("No log entries found for logger {}\n", Logger::NAME);
+    LOG(INFO) << "No log entries found for logger " << Logger::NAME;
     return;
   }
 
@@ -255,11 +314,15 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
                 return;
               }
               using FilterType = std::decay_t<decltype(filter.first)>;
-              FilterType::write(
-                  directory / fmt::format("{}.{}-{:%F-%T}.log", Logger::NAME,
-                                          FilterType::NAME,
+              bool wrote = FilterType::write(
+                  directory / fmt::format("{}.{}-{:%F-%H_%M_%S}.log",
+                                          Logger::NAME, FilterType::NAME,
                                           std::chrono::system_clock::now()),
                   filter.second);
+              if (!wrote) {
+                PLOG(ERROR) << "Failed to write to log file for logger "
+                            << Logger::NAME;
+              }
             }(),
             ...);
       },
@@ -275,8 +338,8 @@ void recordBootTime() {
   using std::chrono::seconds;
 
   if ((sysinfo(&x) == 0)) {
-    logbuf = fmt::format("bootlogger: Boot completed in {:%Mm%Ss}",
-                         seconds(x.uptime));
+    logbuf = fmt::format("Boot completed in {:%Mm%Ss}", seconds(x.uptime));
+    LOG(INFO) << logbuf;
     WriteStringToFile(logbuf, DEV_KMSG.data());
   }
 }
@@ -284,35 +347,38 @@ void recordBootTime() {
 bool delAllAndRecreate(const std::filesystem::path &path) {
   std::error_code ec;
 
-  fmt::print("Deleting everything in {}\n", path.string());
+  LOG(INFO) << "Deleting everything in " << path;
   if (fs::is_directory(path, ec)) {
     fs::remove_all(path, ec);
     if (ec) {
-      fmt::print("Failed to remove directory '{}': {}\n", path.string(),
-                 ec.message());
+      LOG(ERROR) << fmt::format("Failed to remove directory '{}': {}",
+                                path.string(), ec.message());
       return false;
     }
   }
-  puts("Recreating directory...");
-  fs::create_directories(path, ec);
-  if (ec) {
-    fmt::print("Failed to create directory '{}': {}\n", path.string(),
-               ec.message());
+  LOG(INFO) << "Recreating directory...";
+  if (!fs::create_directories(path, ec) && ec) {
+    LOG(ERROR) << fmt::format("Failed to create directory '{}': {}",
+                              path.string(), ec.message());
     return false;
   }
   return true;
 }
 } // namespace
 
-int main(int argc, const char **argv) {
+int main(int argc, char **argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
   bool system_log = false;
   std::mutex lock;
   fs::path kLogDir;
 
-  if (argc != 2) {
-    fmt::print(stderr, "Usage: {} [log directory]\n", argv[0]);
+  android::base::InitLogging(argv);
+
+  umask(022);
+
+  if (argc != 3) {
+    fmt::print(stderr, "Usage: {} [log directory] [directory name]\n", argv[0]);
     return EXIT_FAILURE;
   }
   kLogDir = argv[1];
@@ -320,25 +386,21 @@ int main(int argc, const char **argv) {
     fmt::print(stderr, "{}: Invalid empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
-  umask(022);
+  kLogDir /= argv[2];
 
   if (getenv("LOGGER_MODE_SYSTEM") != nullptr) {
-    fmt::print("Running in system log mode\n");
+    LOG(INFO) << "Running in system log mode";
     system_log = true;
   }
-  if (system_log) {
-    kLogDir /= "system";
-  } else {
-    kLogDir /= "boot";
-  }
 
-  fmt::print("Logger starting with logdir '{}' ...\n", kLogDir.string());
+  LOG(INFO) << fmt::format("Logger starting with logdir '{}'...",
+                           kLogDir.string());
 
   // Determine audit support
   bool has_audit = false;
   if (KernelConfigType kConfig; ReadKernelConfig(kConfig) == 0) {
     if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
-      puts("Detected CONFIG_AUDIT=y in kernel configuration");
+      LOG(INFO) << "Detected CONFIG_AUDIT=y in kernel configuration";
       has_audit = true;
     }
   }
@@ -368,13 +430,12 @@ int main(int argc, const char **argv) {
   } else {
     WaitForProperty("sys.boot_completed", "1");
     recordBootTime();
-
-    // Delay a bit to finish
-    std::this_thread::sleep_for(3s);
   }
+  LOG(INFO) << "Woke up, waiting for threads to finish";
   run = false;
   for (auto &i : threads) {
     i.join();
   }
+  LOG(INFO) << "Logger stopped";
   return 0;
 }

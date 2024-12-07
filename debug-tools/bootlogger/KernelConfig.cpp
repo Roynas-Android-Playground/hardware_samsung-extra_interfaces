@@ -18,7 +18,7 @@ static int ReadConfigGz(std::string &out) {
   size_t len = 0;
   gzFile f = gzopen(kProcConfigGz.data(), "rb");
   if (f == nullptr) {
-    fmt::print("gzopen failed\n");
+    PLOG(ERROR) << "gzopen failed";
     return -errno;
   }
   while ((len = gzread(f, buf.data(), buf.size())) != 0U) {
@@ -27,7 +27,7 @@ static int ReadConfigGz(std::string &out) {
   if (len < 0) {
     int errnum = 0;
     const char *errmsg = gzerror(f, &errnum);
-    fmt::print("Could not read {}, {}\n", kProcConfigGz, errmsg);
+    LOG(ERROR) << "Could not read " << kProcConfigGz << ": " << errmsg;
     return (errnum == Z_ERRNO ? -errno : errnum);
   }
   gzclose(f);
@@ -61,7 +61,7 @@ static bool parseOneConfigLine(const std::string &line,
       value = ConfigValue::INT;
       break;
     default:
-      fmt::print("Unknown config value: {}\n", c);
+      LOG(WARNING) << "Unknown config value: " << c;
       return ret;
     };
   } else {
@@ -75,7 +75,7 @@ static bool parseOneConfigLine(const std::string &line,
       if (!line.empty()) {
         ret = line.front() == '#';
         if (!ret) {
-          fmt::print("Unparsable line: '{}'\n", line);
+          LOG(WARNING) << "Unparsable line: " << line;
         }
       }
       return ret;
@@ -117,7 +117,7 @@ int ReadKernelConfig(KernelConfigType &out) {
   // Determine config.gz size
   rc = stat(kProcConfigGz.data(), &statbuf);
   if (rc < 0) {
-    fmt::print("stat failed: %s\n", strerror(errno));
+    PLOG(ERROR) << "stat " << kProcConfigGz << " failed";
     return -errno;
   }
   // Linux uses gzip -9 ratio to compress, which has average ratio of 21%
@@ -146,7 +146,7 @@ int ReadKernelConfig(KernelConfigType &out) {
   }
   // If any of them returned false, rc would be 1
   if (rc != 0) {
-    fmt::print("Error(s) were found parsing '{}'\n", kProcConfigGz);
+    LOG(ERROR) << "Error(s) were found parsing " << kProcConfigGz;
   }
   return rc;
 }

@@ -9,6 +9,10 @@
 #include <string_view>
 #include <unordered_map>
 
+#define LOG_TAG "bootlogger"
+
+#include <android-base/logging.h>
+
 constexpr int BUF_SIZE = 4096;
 
 // KernelConfig.cpp
@@ -87,7 +91,7 @@ template <> struct fmt::formatter<AvcContext> : formatter<string_view> {
   static auto format(const AvcContext &context,
                      format_context &ctx) -> format_context::iterator {
 
-    auto prefix = fmt::format("allow {} {}:{} ", context.scontext,
+    auto prefix = fmt::format("allow {} {}:{}", context.scontext,
                               context.tcontext, context.tclass);
     switch (context.operation.size()) {
     case 1: {

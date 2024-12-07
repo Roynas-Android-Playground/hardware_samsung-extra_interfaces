@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <regex>
@@ -39,7 +38,6 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
 
   auto pos = string.find("avc:");
   if (pos == std::string::npos) {
-    fmt::print("Invalid input: '{}'\n", string);
     return;
   }
 
@@ -54,7 +52,7 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   } else if (*it == "denied") {
     granted = false;
   } else {
-    fmt::print("Unknown value for ACL status: '{}'\n", *it);
+    LOG(WARNING) << "Unknown value for ACL status: " << *it;
     return;
   }
   ++it; // Now move onto next
@@ -65,13 +63,13 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   ++it; // Skip ending bracelet
   ++it; // Skip 'for'
   if (it == lines.end()) {
-    fmt::print("Invalid input: '{}'\n", string);
+    LOG(WARNING) << "Invalid input: " << string;
     return;
   }
   do {
     auto idx = it->find('=');
     if (idx == std::string::npos) {
-      fmt::print("Unparsable attribute: '{}'\n", *it);
+      LOG(WARNING) << "Unparsable attribute: " << *it;
       continue;
     }
     misc_attributes.emplace(it->substr(0, idx),
@@ -96,14 +94,14 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
       }
     }
     if (!found) {
-      fmt::print("Invalid permissive status: '{}'\n", pit->second);
+      LOG(WARNING) << "Invalid permissive status: " << pit->second;
       ret = false;
     }
   }
   if (ret) {
     stale = false;
   } else {
-    fmt::print("Failed to parse '{}'\n", string);
+    LOG(ERROR) << "Failed to parse: " << string;
   }
 }
 
@@ -115,7 +113,7 @@ bool AvcContext::findOrDie(std::string &dest, const std::string &key) {
     dest = it->second;
     misc_attributes.erase(it);
   } else {
-    fmt::print("Empty value for key: '{}'\n", key);
+    LOG(WARNING) << "Empty value for key: " << key;
   }
   return ret;
 }
