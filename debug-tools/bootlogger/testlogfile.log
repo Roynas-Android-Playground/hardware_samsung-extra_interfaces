@@ -1,0 +1,50 @@
+12-07 18:30:40.557  1282  1747 W libc    : Unable to set property "ctl.interface_start" to "android.frameworks.sensorservice@1.0::ISensorManager/default": PROP_ERROR_HANDLE_CONTROL_MESSAGE (0x20)
+12-07 18:13:16.866  5337  5337 W Background_2: type=1400 audit(0.0:56): avc:  denied  { search } for  name="5900000.qcom,kgsl-3d0" dev="sysfs" ino=19968 scontext=u:r:untrusted_app:s0:c207,c257,c512,c768 tcontext=u:object_r:sysfs_msm_subsys:s0 tclass=dir permissive=0 app=com.google.android.apps.maps
+12-07 18:12:39.994  2746  2746 I ActivityThread: assets removed: []
+12-07 18:12:39.994  2746  2746 I ActivityThread: assets added: []
+12-07 18:12:39.994  3224  3224 I ActivityThread: ApplicationInfo updating for android.ext.services, new timestamp: 36689
+12-07 18:12:39.994  3224  3224 I ActivityThread: assets removed: []
+12-07 18:12:39.994  3224  3224 I ActivityThread: assets added: []
+12-07 18:12:39.995  2702  2702 I ActivityThread: ApplicationInfo updating for org.codeaurora.ims, new timestamp: 36690
+12-07 18:12:39.995  2702  2702 I ActivityThread: assets removed: []
+12-07 18:12:39.995  2702  2702 I ActivityThread: assets added: []
+12-07 18:12:39.996  3058  3058 I ActivityThread: ApplicationInfo updating for com.google.android.gms, new timestamp: 36689
+12-07 18:12:39.996  3058  3058 I ActivityThread: assets removed: []
+12-07 18:12:39.996  3058  3058 I ActivityThread: assets added: []
+12-07 18:12:39.996  2713  2713 I ActivityThread: ApplicationInfo updating for com.android.se, new timestamp: 36689
+12-07 18:12:39.996  2713  2713 I ActivityThread: assets removed: []
+12-07 18:12:39.996  2713  2713 I ActivityThread: assets added: []
+12-07 18:12:39.997  2003  2026 I ActivityTaskManager: Config changes=80000000 {1.0 ?mcc0mnc [en_US] ldltr sw800dp w1333dp h800dp 240dpi xlrg long land night finger -keyb/v/h -nav/h winConfig={ mBounds=Rect(0, 0 - 2000, 1200) mAppBounds=Rect(0, 0 - 2000, 1200) mMaxBounds=Rect(0, 0 - 2000, 1200) mDisplayRotation=ROTATION_90 mWindowingMode=fullscreen mActivityType=undefined mAlwaysOnTop=undefined mRotation=ROTATION_90} as.3 s.50 fontWeightAdjustment=0}
+12-07 18:30:40.558  1282  1747 I hwservicemanager: Tried to start android.frameworks.sensorservice@1.0::ISensorManager/default as a lazy service, but was unable to. Usually this happens when a service is not installed, but if the service is intended to be used as a lazy service, then it may be configured incorrectly.
+12-07 18:30:40.558  1282  1750 W libc    : Unable to set property "ctl.interface_start" to "android.frameworks.sensorservice@1.0::ISensorManager/default": PROP_ERROR_HANDLE_CONTROL_MESSAGE (0x20)
+12-07 18:30:40.558  1282  1750 I hwservicemanager: Tried to start android.frameworks.sensorservice@1.0::ISensorManager/default as a lazy service, but was unable to. Usually this happens when a service is not installed, but if the service is intended to be used as a lazy service, then it may be configured incorrectly.
+12-07 18:30:40.563  1724  1724 I adbd    : persist.adb.watchdog set to ''
+12-07 18:30:40.563  1724  1724 I adbd    : persist.sys.test_harness set to ''
+12-07 18:30:40.563  1724  1724 I adbd    : adb watchdog timeout set to 600 seconds
+12-07 18:30:40.564  1724  1755 I adbd    : Waiting for persist.adb.tls_server.enable=1
+12-07 18:30:40.566  1724  1757 I adbd    : opening control endpoint /dev/usb-ffs/adb/ep0
+12-07 18:30:40.566  1724  1724 I adbd    : adbd started
+12-07 18:30:40.568  1724  1757 I adbd    : UsbFfsConnection constructed
+12-07 18:30:40.568  1724  1759 I adbd    : UsbFfs-monitor thread spawned
+12-07 18:30:40.595  1282  1282 I hwservicemanager: getTransport: Cannot find entry android.hardware.health@2.1::IHealth/default in either framework or device VINTF manifest.
+12-07 18:30:45.282   268   268 W kworker/u16:6: type=1400 audit(0.0:13): avc:  denied  { dac_read_search } for  capability=2  scontext=u:r:kernel:s0 tcontext=u:r:kernel:s0 tclass=capability permissive=0
+12-07 18:30:45.282   268   268 W kworker/u16:6: type=1400 audit(0.0:14): avc:  denied  { dac_read_search } for  capability=2  scontext=u:r:kernel:s0 tcontext=u:r:kernel:s0 tclass=capability permissive=0
+12-07 18:30:45.287  1993  1993 I Watchdog: Resuming HandlerChecker: main thread for reason: packagemanagermain. Pause count: 0
+12-07 18:30:45.288  1993  1993 D SystemServerTiming: DexUseManagerLocal
+12-07 18:30:45.286   268   268 W kworker/u16:6: type=1400 audit(0.0:15): avc:  denied  { dac_read_search } for  capability=2  scontext=u:r:kernel:s0 tcontext=u:r:kernel:s0 tclass=capability permissive=0
+12-07 18:30:45.290   268   268 W kworker/u16:6: type=1400 audit(0.0:16): avc:  denied  { dac_read_search } for  capability=2  scontext=u:r:kernel:s0 tcontext=u:r:kernel:s0 tclass=capability permissive=0
+<11>[   14.573978] SELinux: avc:  denied  { find } for pid=1759 uid=1021 name=android.frameworks.sensorservice.ISensorManager/default scontext=u:r:vendor_location:s0 tcontext=u:object_r:fwk_sensor_service:s0 tclass=service_manager permissive=0
+<11>[   14.577919] SELinux: avc:  denied  { find } for pid=1759 uid=1021 name=android.frameworks.sensorservice.ISensorManager/default scontext=u:r:vendor_location:s0 tcontext=u:object_r:fwk_sensor_service:s0 tclass=service_manager permissive=0
+<36>[   12.385438] type=1400 audit(1733574524.529:6): avc:  denied  { read } for  comm="audioserver" name="bin" dev="overlay" ino=20108 scontext=u:r:audioserver:s0 tcontext=u:object_r:vendor_file:s0 tclass=dir permissive=0
+<36>[   12.385594] type=1400 audit(1733574524.529:7): avc:  denied  { search } for  comm="audioserver" name="tmp" dev="dm-45" ino=99 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_data_file:s0 tclass=dir permissive=0
+<36>[   12.385648] type=1400 audit(1733574524.529:8): avc:  denied  { search } for  comm="audioserver" name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+<36>[   12.385681] type=1400 audit(1733574524.529:9): avc:  denied  { search } for  comm="audioserver" name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+<36>[   12.385710] type=1400 audit(1733574524.529:10): avc:  denied  { search } for  comm="audioserver" name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+<36>[   29.225994] type=1400 audit(1733574541.369:12): avc:  denied  { map } for  comm="RenderThread" path="/dev/__properties__/u:object_r:qemu_hw_prop:s0" dev="tmpfs" ino=15635 scontext=u:r:system_app:s0 tcontext=u:object_r:qemu_hw_prop:s0
+12-07 21:28:44.527   777   777 I KernelSU: ksud::module: /data/adb/post-mount.d not exists, skip
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:6): avc:  denied  { read } for  name="bin" dev="overlay" ino=20108 scontext=u:r:audioserver:s0 tcontext=u:object_r:vendor_file:s0 tclass=dir permissive=0
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:7): avc:  denied  { search } for  name="tmp" dev="dm-45" ino=99 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_data_file:s0 tclass=dir permissive=0
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:8): avc:  denied  { search } for  name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:9): avc:  denied  { search } for  name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:10): avc:  denied  { search } for  name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0
+12-07 21:28:44.529  1271  1271 W audioserver: type=1400 audit(0.0:11): avc:  denied  { search } for  name="tests" dev="dm-45" ino=110 scontext=u:r:audioserver:s0 tcontext=u:object_r:shell_test_data_file:s0 tclass=dir permissive=0

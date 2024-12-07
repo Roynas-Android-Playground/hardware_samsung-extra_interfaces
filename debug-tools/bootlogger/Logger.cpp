@@ -144,6 +144,23 @@ struct Dmesg {
   }
 };
 
+#ifdef TESTING
+struct Test {
+  constexpr static std::string_view NAME = "test";
+  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
+
+  static HANDLE open() {
+    std::filesystem::path file = __FILE__;
+    file = file.parent_path() / "testlogfile.log";
+    return {fopen(file.c_str(), "r"), &fclose};
+  }
+  template <size_t size>
+  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
+    return ::fgets(data.data(), data.size(), handle.get());
+  }
+};
+#endif
+
 struct Filter {
   static bool write(const std::filesystem::path &file,
                     const std::set<std::string> &results) {
@@ -342,6 +359,7 @@ int main(int argc, char **argv) {
 
   umask(022);
 
+#ifndef TESTING
   if (argc != 3) {
     fmt::print(stderr, "Usage: {} [log directory] [directory name]\n", argv[0]);
     return EXIT_FAILURE;
@@ -352,6 +370,9 @@ int main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
   kLogDir /= argv[2];
+#else
+  kLogDir = "./test";
+#endif
 
   if (getenv("LOGGER_MODE_SYSTEM") != nullptr) {
     LOG(INFO) << "Running in system log mode";
@@ -395,6 +416,11 @@ int main(int argc, char **argv) {
 
   threads.emplace_back(
       [&] { start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run); });
+
+#ifdef TESTING
+  threads.emplace_back(
+      [&] { start<Test, FilterAvc, FilterAvcGen>(kLogDir, &run); });
+#endif
 
   if (system_log) {
     WaitForProperty(MAKE_LOGGER_PROP("enabled"), "false");
