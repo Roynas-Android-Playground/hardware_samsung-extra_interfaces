@@ -37,8 +37,13 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   std::vector<std::string> lines;
   bool ret = true;
 
-  const std::string sub_str = std::string(string.substr(string.find("avc:")));
-  std::istringstream iss(sub_str);
+  auto pos = string.find("avc:");
+  if (pos == std::string::npos) {
+    fmt::print("Invalid input: '{}'\n", string);
+    return;
+  }
+
+  std::istringstream iss(std::string(string.substr(pos)));
   while ((iss >> line)) {
     lines.emplace_back(line);
   }
@@ -98,7 +103,7 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   if (ret) {
     stale = false;
   } else {
-    fmt::print("Failed to parse '{}'\n", sub_str.c_str());
+    fmt::print("Failed to parse '{}'\n", string);
   }
 }
 
