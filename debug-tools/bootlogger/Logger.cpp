@@ -175,7 +175,7 @@ struct FilterAvc : Filter {
 };
 
 struct FilterAvcGen : Filter {
-  constexpr static std::string_view NAME = "sepolicy.gen";
+  constexpr static std::string_view NAME = "generated_sepolicy";
 
   static bool filter(const std::string &line) {
     AvcContext ctx(line);
@@ -231,9 +231,8 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
   }
 
   // Open log destination
-  std::filesystem::path logPath(
-      directory / fmt::format("{}-{:%F-%H_%M_%S}.log", Logger::NAME,
-                              std::chrono::system_clock::now()));
+  std::filesystem::path logPath(directory /
+                                fmt::format("{}.txt", Logger::NAME));
   std::ofstream logFile(logPath);
   if (!logFile.is_open()) {
     PLOG(ERROR) << "Failed to open " << logPath << " for logging";
@@ -282,9 +281,8 @@ void start(const std::filesystem::path &directory, std::atomic_bool *run) {
               }
               using FilterType = std::decay_t<decltype(filter.first)>;
               bool wrote = FilterType::write(
-                  directory / fmt::format("{}.{}-{:%F-%H_%M_%S}.log",
-                                          Logger::NAME, FilterType::NAME,
-                                          std::chrono::system_clock::now()),
+                  directory /
+                      fmt::format("{}.{}.txt", Logger::NAME, FilterType::NAME),
                   filter.second);
               if (!wrote) {
                 PLOG(ERROR) << "Failed to write to log file for logger "
@@ -388,9 +386,15 @@ int main(int argc, char **argv) {
       }
     });
   }
-  threads.emplace_back([&] {
-    start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run);
-  });
+
+  std::ofstream timestamp(kLogDir / "TIMESTAMP");
+  if (timestamp.is_open()) {
+    timestamp << fmt::format("{:%F %T}", std::chrono::system_clock::now());
+  }
+  timestamp.close();
+
+  threads.emplace_back(
+      [&] { start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run); });
 
   if (system_log) {
     WaitForProperty(MAKE_LOGGER_PROP("enabled"), "false");
