@@ -46,10 +46,13 @@ inline bool GetBoolProperty(const std::string &key, bool default_value) {
 }
 
 // This is a mock anyway, no need to get serious
-inline bool WaitForProperty(const std::string &key, const std::string &expected_value,
-                     std::chrono::milliseconds relative_timeout =
-                         std::chrono::milliseconds::max()) {
-  std::this_thread::sleep_for(std::chrono::seconds(5));
+inline bool WaitForProperty(const std::string &key,
+                            const std::string &expected_value,
+                            std::chrono::milliseconds relative_timeout =
+                                std::chrono::milliseconds::max()) {
+  static auto endingTP =
+      std::chrono::system_clock::now() + std::chrono::seconds(10);
+  std::this_thread::sleep_until(endingTP);
   return true;
 }
 
