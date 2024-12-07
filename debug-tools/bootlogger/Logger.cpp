@@ -166,12 +166,11 @@ struct FilterAvc : Filter {
 
   static bool filter(const std::string &line) {
     // Matches "avc: denied { ioctl } for comm=..." for example
-    const static auto kAvcMessageRegEX =
-        std::regex(R"(avc:\s+denied\s+\{(\s\w+)+\s\}\sfor\s)");
+    const static auto kAvcMessageRegEX = std::regex(
+        R"(avc:\s+denied\s+\{(\s\w+)+\s\}\sfor\s)", std::regex::ECMAScript);
     bool match = std::regex_search(line, kAvcMessageRegEX,
-                                   std::regex_constants::format_sed);
-    match &= line.find("untrusted_app") == std::string::npos;
-    return match;
+                                   std::regex_constants::match_not_null);
+    return match && line.find("untrusted_app") == std::string::npos;
   }
 };
 
@@ -212,38 +211,6 @@ struct FilterAvcGen : Filter {
     fileStream << fmt::format("{}\n", contexts);
     fileStream.close();
     return true;
-  }
-};
-
-struct FilterLibc : Filter {
-  constexpr static std::string_view NAME = "libc_properties";
-
-  static bool filter(const std::string &line) {
-    // libc : Access denied finding property "
-    const static auto kPropertyAccessRegEX = std::regex(
-        R"(libc\s+:\s+\w+\s\w+\s\w+\s\w+\s(\"[a-zA-z.]+\")( to \"([a-zA-z0-9.@:\/]+)\")?)");
-    static std::set<std::string> propsDenied;
-    std::smatch kPropMatch;
-
-    // Matches "libc : Access denied finding property ..."
-    if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX,
-                          std::regex_constants::format_sed)) {
-      if (kPropMatch.size() == 3) {
-        LOG(INFO) << fmt::format(
-            "Control message {} was unable to be set for {}", kPropMatch.str(1),
-            kPropMatch.str(3));
-        return true;
-      } else if (kPropMatch.size() == 1) {
-        const auto propString = kPropMatch.str(1);
-        LOG(INFO) << fmt::format("Couldn't set prop {}", propString);
-        if (propsDenied.find(propString) != propsDenied.end()) {
-          return false;
-        }
-        propsDenied.insert(propString);
-        return true;
-      }
-    }
-    return false;
   }
 };
 
@@ -422,7 +389,7 @@ int main(int argc, char **argv) {
     });
   }
   threads.emplace_back([&] {
-    start<Logcat, FilterAvc, FilterAvcGen, FilterLibc>(kLogDir, &run);
+    start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run);
   });
 
   if (system_log) {
