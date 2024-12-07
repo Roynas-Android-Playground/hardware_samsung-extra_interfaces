@@ -31,7 +31,7 @@ SEContext::SEContext(std::string context) : m_context(std::move(context)) {
   }
 }
 
-AvcContext::AvcContext(const std::string_view string) : stale(true) {
+AvcContext::AvcContext(const std::string_view string) {
   std::string line;
   std::vector<std::string> lines;
   bool ret = true;
@@ -88,7 +88,7 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
     int x = 0;
     if (std::stringstream(pit->second) >> x) {
       if (x == 0 || x == 1) {
-        permissive = x;
+        permissive = (x != 0);
         misc_attributes.erase(pit);
         found = true;
       }

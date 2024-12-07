@@ -4,6 +4,7 @@
 #include <cstring>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
+#include <iterator>
 #include <set>
 #include <string>
 #include <string_view>
@@ -38,6 +39,7 @@ int ReadKernelConfig(KernelConfigType &out);
 
 // AuditToAllow.cpp
 #include <map>
+#include <utility>
 #include <vector>
 
 struct AvcContext;
@@ -67,9 +69,10 @@ struct AvcContext {
   std::string tclass;           // file, lnk_file, sock_file...
   AttributeMap misc_attributes; // ino, dev, name, app...
   bool permissive;              // enforced or not
-  bool stale = false; // Whether this is used, used for merging contexts
+  bool stale = true; // Whether this is used, used for merging contexts
 
   explicit AvcContext(const std::string_view string);
+  AvcContext() = default;
   AvcContext &operator+=(AvcContext &other);
 
 private:
@@ -110,12 +113,12 @@ template <> struct fmt::formatter<AvcContexts> : formatter<string_view> {
   // parse is inherited from formatter<string_view>.
   static auto format(AvcContexts context,
                      format_context &ctx) -> format_context::iterator {
-    AvcContexts filtered_contexts;
+    AvcContexts filtered_contexts = std::move(context);
     auto en =
-        std::remove_if(context.begin(), context.end(), [](const auto &context) {
+        std::remove_if(filtered_contexts.begin(), filtered_contexts.end(), [](const auto &context) {
           return context.stale || context.operation.size() == 0;
         });
-    filtered_contexts.insert(filtered_contexts.end(), en, context.end());
+    filtered_contexts.resize(std::distance(filtered_contexts.begin(), en));
     return fmt::format_to(ctx.out(), "{}", fmt::join(filtered_contexts, "\n"));
   }
 };
