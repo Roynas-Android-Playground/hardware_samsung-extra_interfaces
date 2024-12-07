@@ -1,19 +1,10 @@
 #pragma once
 
-#include <cstdint>
 #include <cstring>
 #include <set>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-
-#define LOG_TAG "bootlogger"
-
-#include <log/log.h>
-
-// Similar to perror(3)
-#define PLOGE(fmt, ...)                                                        \
-  ALOGE("%s: " fmt ": %s", __func__, ##__VA_ARGS__, strerror(errno))
 
 constexpr int BUF_SIZE = 4096;
 
@@ -81,4 +72,3 @@ private:
 
 extern std::ostream &operator<<(std::ostream &self, const AvcContext &context);
 extern std::ostream &operator<<(std::ostream &self, const AvcContexts &context);
-extern std::ostream &operator<<(std::ostream &self, const SEContext &context);

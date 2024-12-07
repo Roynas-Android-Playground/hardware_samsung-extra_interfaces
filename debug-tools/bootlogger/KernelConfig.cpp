@@ -1,3 +1,4 @@
+#include <fmt/core.h>
 #include <string_view>
 #include <sys/stat.h>
 #include <zlib.h>
@@ -17,16 +18,16 @@ static int ReadConfigGz(std::string &out) {
   size_t len = 0;
   gzFile f = gzopen(kProcConfigGz.data(), "rb");
   if (f == nullptr) {
-    PLOGE("gzopen");
+    fmt::print("gzopen failed\n");
     return -errno;
   }
-  while ((len = gzread(f, buf.data(), buf.size())) != 0u) {
+  while ((len = gzread(f, buf.data(), buf.size())) != 0U) {
     out.append(buf.data(), len);
   }
   if (len < 0) {
     int errnum = 0;
     const char *errmsg = gzerror(f, &errnum);
-    ALOGE("Could not read %s, %s", kProcConfigGz, errmsg);
+    fmt::print("Could not read {}, {}\n", kProcConfigGz, errmsg);
     return (errnum == Z_ERRNO ? -errno : errnum);
   }
   gzclose(f);
@@ -60,7 +61,7 @@ static bool parseOneConfigLine(const std::string &line,
       value = ConfigValue::INT;
       break;
     default:
-      ALOGW("Unknown config value: %c", c);
+      fmt::print("Unknown config value: {}\n", c);
       return ret;
     };
   } else {
@@ -74,7 +75,7 @@ static bool parseOneConfigLine(const std::string &line,
       if (!line.empty()) {
         ret = line.front() == '#';
         if (!ret) {
-          ALOGW("Unparsable line: '%s'", line.c_str());
+          fmt::print("Unparsable line: '{}'\n", line);
         }
       }
       return ret;
@@ -116,7 +117,7 @@ int ReadKernelConfig(KernelConfigType &out) {
   // Determine config.gz size
   rc = stat(kProcConfigGz.data(), &statbuf);
   if (rc < 0) {
-    PLOGE("stat");
+    fmt::print("stat failed: %s\n", strerror(errno));
     return -errno;
   }
   // Linux uses gzip -9 ratio to compress, which has average ratio of 21%
@@ -141,11 +142,11 @@ int ReadKernelConfig(KernelConfigType &out) {
   while (std::getline(ss, line)) {
     // Returns true (1) on success, so invert it to
     // make use of bitwise OR
-    rc |= !parseOneConfigLine(line, out);
+    rc |= static_cast<int>(!parseOneConfigLine(line, out));
   }
   // If any of them returned false, rc would be 1
-  if (rc) {
-    ALOGW("Error(s) were found parsing '%s'", kProcConfigGz);
+  if (rc != 0) {
+    fmt::print("Error(s) were found parsing '{}'\n", kProcConfigGz);
   }
   return rc;
 }

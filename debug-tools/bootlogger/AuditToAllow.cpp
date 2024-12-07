@@ -1,3 +1,5 @@
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <regex>
 #include <sstream>
 #include <string>
@@ -29,6 +31,14 @@ SEContext::SEContext(std::string context) : m_context(std::move(context)) {
   }
 }
 
+template <> struct fmt::formatter<SEContext> : formatter<string_view> {
+  // parse is inherited from formatter<string_view>.
+  auto format(const SEContext &context,
+              format_context &ctx) const -> format_context::iterator {
+    return formatter<string_view>::format(static_cast<std::string>(context), ctx);
+  }
+};
+
 AvcContext::AvcContext(const std::string_view string) : stale(true) {
   std::string line;
   std::vector<std::string> lines;
@@ -46,7 +56,7 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   } else if (*it == "denied") {
     granted = false;
   } else {
-    ALOGW("Unknown value for ACL status: '%s'", it->c_str());
+    fmt::print("Unknown value for ACL status: '{}'\n", *it);
     return;
   }
   ++it; // Now move onto next
@@ -57,13 +67,13 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
   ++it; // Skip ending bracelet
   ++it; // Skip 'for'
   if (it == lines.end()) {
-    ALOGE("Invalid input: '%s'", string.data());
+    fmt::print("Invalid input: '{}'\n", string);
     return;
   }
   do {
     auto idx = it->find('=');
     if (idx == std::string::npos) {
-      ALOGW("Unparsable attribute: '%s'", it->c_str());
+      fmt::print("Unparsable attribute: '{}'\n", *it);
       continue;
     }
     misc_attributes.emplace(it->substr(0, idx),
@@ -88,14 +98,14 @@ AvcContext::AvcContext(const std::string_view string) : stale(true) {
       }
     }
     if (!found) {
-      ALOGE("Invalid permissive status: '%s'", pit->second.c_str());
+      fmt::print("Invalid permissive status: '{}'\n", pit->second);
       ret = false;
     }
   }
   if (ret) {
     stale = false;
   } else {
-    ALOGE("Failed to parse '%s'", sub_str.c_str());
+    fmt::print("Failed to parse '{}'\n", sub_str.c_str());
   }
 }
 
@@ -107,7 +117,7 @@ bool AvcContext::findOrDie(std::string &dest, const std::string &key) {
     dest = it->second;
     misc_attributes.erase(it);
   } else {
-    ALOGE("Empty value for key: '%s'", key.c_str());
+    fmt::print("Empty value for key: '{}'\n", key);
   }
   return ret;
 }
@@ -146,18 +156,14 @@ std::ostream &operator<<(std::ostream &self, const AvcContext &context) {
     return self;
   }
   // END HOOKS
-  self << "allow " << context.scontext << ' ' << context.tcontext << ':'
-       << context.tclass << ' ';
+  self << fmt::format("allow {} {}:{} ", context.scontext, context.tcontext,
+                      context.tclass);
   switch (context.operation.size()) {
   case 1: {
     self << *context.operation.begin();
   } break;
   default: {
-    self << '{' << ' ';
-    for (const auto &op : context.operation) {
-      self << op << ' ';
-    }
-    self << '}';
+    self << fmt::format("{{ {} }}", fmt::join(context.operation, " "));
   } break;
   };
   self << ';';
@@ -176,10 +182,5 @@ std::ostream &operator<<(std::ostream &self, const AvcContexts &context) {
   for (const auto &entry : rules) {
     self << entry;
   }
-  return self;
-}
-
-std::ostream &operator<<(std::ostream &self, const SEContext &context) {
-  self << static_cast<std::string>(context);
   return self;
 }

@@ -1,12 +1,14 @@
 service logdump /system/system_ext/bin/logger /data/debug
     user root
     oneshot
+    stdio_to_kmsg
     disabled
 
 service logdump-system /system/system_ext/bin/logger /data/debug
     user root
     setenv LOGGER_MODE_SYSTEM 1
     oneshot
+    stdio_to_kmsg
     disabled
 
 on post-fs-data

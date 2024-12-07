@@ -14,16 +14,23 @@
  * limitations under the License.
  */
 
+#include <algorithm>
 #include <android-base/file.h>
 #include <android-base/properties.h>
+#include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <fmt/chrono.h>
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <functional>
 #include <string_view>
 #include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <system_error>
+#include <type_traits>
 #include <unistd.h>
 
 #include <atomic>
@@ -52,184 +59,105 @@ namespace fs = std::filesystem;
 
 #define MAKE_LOGGER_PROP(prop) "persist.ext.logdump." prop
 
-// Base context for outputs with file
-struct OutputContext {
-  // File path (absolute)  of this context.
-  // Note that .txt suffix is auto appended in constructor.
-  std::filesystem::path kFilePath;
+struct Logcat {
+  constexpr static std::string_view NAME = "logcat";
+  constexpr static std::string_view LOGC = "/system/bin/logcat";
+  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
 
-  // Takes one argument 'filename' without file extension
-  OutputContext(const fs::path &logDir, const std::string_view filename,
-                const std::string_view filtername = "") {
-
-    std::string craftedFilename;
-    if (!filtername.empty()) {
-      craftedFilename = std::string(filtername).append(".").append(filename);
-    } else {
-      craftedFilename = filename;
-    }
-    kFilePath = logDir / craftedFilename.append(".txt");
-
-    ALOGI("%s: Opening '%s'%s", __func__, kFilePath.c_str(),
-          !filtername.empty() ? " (filter)" : "");
-    ofs.open(kFilePath);
-
-    if (!ofs) {
-      PLOGE("Failed to open '%s'", kFilePath.c_str());
-    }
+  static HANDLE open() { return {popen(LOGC.data(), "r"), &pclose}; }
+  static void close(HANDLE fp) {
+    // No-op
   }
-
-  // No default constructor
-  OutputContext() = delete;
-
-  /**
-   * Writes the string to this context's file
-   *
-   * @param string data
-   */
-  OutputContext &operator<<(const std::string_view &data) {
-    len += data.size();
-    if (len > BUF_SIZE) {
-      ofs.flush();
-      len = 0;
-    }
-    ofs << data << "\n";
-    return *this;
-  }
-
-  operator bool() const { return static_cast<bool>(ofs); }
-
-  /**
-   * Cleanup
-   */
-  ~OutputContext() {
-    std::error_code ec;
-    const auto rc = std::filesystem::file_size(kFilePath, ec);
-    if (!ec && rc == 0) {
-      ALOGD("Deleting '%s' because it is empty", kFilePath.c_str());
-      std::filesystem::remove(kFilePath);
-    }
-  }
-
-private:
-  std::ofstream ofs;
-  size_t len = 0;
 };
 
-/**
- * Filter support to LoggerContext's stream and outputting to a file.
- */
-struct LogFilterContext {
-  // Function to be invoked to filter
-  virtual bool filter(const std::string &line) const = 0;
-  // Constructor accepting filtername
-  explicit LogFilterContext(std::string name) : kFilterName(std::move(name)) {}
-  // No default one
-  LogFilterContext() = delete;
-  // Virtual dtor
-  virtual ~LogFilterContext() = default;
-  // Log filter name
-  [[nodiscard]] std::string_view name() const { return kFilterName; }
+struct Dmesg {
+  constexpr static std::string_view NAME = "dmesg";
+  constexpr static std::string_view FILEC = "/proc/kmsg";
+  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
 
-protected:
-  // Provide a single constant for regEX usage
-  constexpr static std::regex_constants::match_flag_type kRegexMatchflags =
-      std::regex_constants::format_sed;
-  // Filter name, must be a vaild file name itself.
-  std::string kFilterName;
+  static HANDLE open() { return {fopen(FILEC.data(), "r"), &fclose}; }
+  static void close(HANDLE fp) {
+    // No-op
+  }
 };
 
-struct LoggerContext : OutputContext {
-
-  /**
-   * Register a LogFilterContext to this stream.
-   *
-   * @param ctx The context to register
-   */
-  void registerLogFilter(const fs::path &logDir,
-                         const std::shared_ptr<LogFilterContext> &ctx) {
-    if (ctx) {
-      filters[ctx] = std::make_unique<OutputContext>(logDir, name, ctx->name());
+struct Filter {
+  static bool write(const std::filesystem::path &file,
+                    const std::vector<std::string> &results) {
+    if (results.empty()) {
+      return true;
     }
-  }
-
-  /**
-   * Start the associated logger
-   *
-   * @param run Pointer to run/stop control variable
-   */
-  void startLogger(std::atomic_bool *run) {
-    std::array<char, 512> buf = {0};
-    if (_fp != nullptr) {
-      // Erase failed-to-open contexts
-      for (auto it = filters.begin(), last = filters.end(); it != last;) {
-        if (!it->second) {
-          it = filters.erase(it);
-        } else {
-          ++it;
-        }
-      }
-      while (*run) {
-        const auto *ret = fgets(buf.data(), sizeof(buf), _fp.get());
-        std::istringstream ss(buf.data());
-        std::string line;
-        if (ret != nullptr) {
-          while (std::getline(ss, line)) {
-            for (auto &f : filters) {
-              if (f.first->filter(line)) {
-                *f.second << line;
-              }
-            }
-            *this << line;
-          }
-        }
-      }
-      // ofstream will auto close
-    } else {
-      ALOGE("[Context %s] Opening output '%s'", name.c_str(),
-            kFilePath.c_str());
+    std::ofstream fileStream(file);
+    if (!fileStream.is_open()) {
+      fmt::print("Failed to open file: {}\n", file.string());
+      return false;
     }
+    for (const auto &result : results) {
+      fileStream << result << '\n';
+    }
+    fileStream.close();
+    return true;
   }
-
-private:
-  std::string name;
-  std::unordered_map<std::shared_ptr<LogFilterContext>,
-                     std::unique_ptr<OutputContext>>
-      filters;
-  std::unique_ptr<FILE, std::function<void(FILE *)>> _fp;
-
-public:
-  LoggerContext(decltype(_fp) fp, const fs::path &logDir, std::string name)
-      : OutputContext(logDir, name), name(std::move(name)), _fp(std::move(fp)) {
-  }
-  using FileHandle = decltype(_fp);
 };
 
-// Filters - AVC
-struct AvcFilterContext : LogFilterContext {
-  bool filter(const std::string &line) const override {
+struct FilterAvc : Filter {
+  constexpr static std::string_view NAME = "avc";
+
+  static bool filter(const std::string &line) {
     // Matches "avc: denied { ioctl } for comm=..." for example
     const static auto kAvcMessageRegEX =
         std::regex(R"(avc:\s+denied\s+\{(\s\w+)+\s\}\sfor\s)");
-    bool match = std::regex_search(line, kAvcMessageRegEX, kRegexMatchflags);
+    bool match = std::regex_search(line, kAvcMessageRegEX,
+                                   std::regex_constants::format_sed);
     match &= line.find("untrusted_app") == std::string::npos;
-    if (match && _ctx) {
-      const std::lock_guard<std::mutex> _(_lock);
-      _ctx->emplace_back(line);
-    }
     return match;
   }
-  std::shared_ptr<AvcContexts> _ctx;
-  std::mutex &_lock;
-  AvcFilterContext(std::shared_ptr<AvcContexts> ctx, std::mutex &lock)
-      : LogFilterContext("avc"), _ctx(std::move(ctx)), _lock(lock) {}
-  AvcFilterContext() = delete;
-  ~AvcFilterContext() override = default;
 };
 
-// Filters - libc property
-struct libcPropFilterContext : LogFilterContext {
-  bool filter(const std::string &line) const override {
+struct FilterAvcGen : Filter {
+  constexpr static std::string_view NAME = "sepolicy.gen";
+
+  static bool filter(const std::string &line) {
+    AvcContext ctx(line);
+    return !ctx.stale;
+  }
+  static bool write(const std::filesystem::path &file,
+                    const std::vector<std::string> &results) {
+    if (results.empty()) {
+      return true;
+    }
+
+    // Translate to AVCContexts vector
+    AvcContexts contexts;
+    std::transform(results.begin(), results.end(), std::back_inserter(contexts),
+                   [](const std::string &file) { return AvcContext(file); });
+
+    // Combine AVC contexts
+    for (auto &e1 : contexts) {
+      for (auto &e2 : contexts) {
+        if (&e1 == &e2) {
+          continue;
+        }
+        e1 += e2;
+      }
+    }
+
+    // Write to file
+    std::ofstream fileStream(file);
+    if (!fileStream.is_open()) {
+      fmt::print("Failed to open file: {}\n", file.string());
+      return false;
+    }
+    fileStream << contexts;
+    fileStream.close();
+    return true;
+  }
+};
+
+struct FilterLibc : Filter {
+  constexpr static std::string_view NAME = "libc_properties";
+
+  static bool filter(const std::string &line) {
     // libc : Access denied finding property "
     const static auto kPropertyAccessRegEX = std::regex(
         R"(libc\s+:\s+\w+\s\w+\s\w+\s\w+\s(\"[a-zA-z.]+\")( to \"([a-zA-z0-9.@:\/]+)\")?)");
@@ -238,14 +166,14 @@ struct libcPropFilterContext : LogFilterContext {
 
     // Matches "libc : Access denied finding property ..."
     if (std::regex_search(line, kPropMatch, kPropertyAccessRegEX,
-                          kRegexMatchflags)) {
+                          std::regex_constants::format_sed)) {
       if (kPropMatch.size() == 3) {
-        ALOGI("Control message %s was unable to be set for %s",
-              kPropMatch.str(1).c_str(), kPropMatch.str(3).c_str());
+        fmt::print("Control message {} was unable to be set for {}\n",
+                   kPropMatch.str(1), kPropMatch.str(3));
         return true;
       } else if (kPropMatch.size() == 1) {
         const auto propString = kPropMatch.str(1);
-        ALOGI("Couldn't set prop %s", propString.c_str());
+        fmt::print("Couldn't set prop {}\n", propString);
         if (propsDenied.find(propString) != propsDenied.end()) {
           return false;
         }
@@ -255,52 +183,121 @@ struct libcPropFilterContext : LogFilterContext {
     }
     return false;
   }
-  libcPropFilterContext() : LogFilterContext("libc_props") {}
-  ~libcPropFilterContext() override = default;
 };
 
+/**
+ * Start the associated logger
+ *
+ * @param run Pointer to run/stop control variable
+ */
+template <typename Logger, typename... Filters>
+void start(const std::filesystem::path &directory, std::atomic_bool *run) {
+  std::array<char, 512> buf = {0};
+
+  // Open log source
+  auto _fp = Logger::open();
+  if (_fp == nullptr) {
+    fmt::print("Failed to open file for logger {}: {}\n", Logger::NAME,
+               strerror(errno));
+    Logger::close(std::move(_fp));
+    return;
+  }
+
+  // Open log destination
+  std::filesystem::path logPath(directory /
+                                fmt::format("{}-{:%F-%T}.log", Logger::NAME,
+                                            std::chrono::system_clock::now()));
+  std::ofstream logFile(logPath);
+  if (!logFile.is_open()) {
+    fmt::print("Failed to open file for logging: {}\n", logPath.string());
+    Logger::close(std::move(_fp));
+    return;
+  }
+
+  std::tuple<std::pair<Filters, std::vector<std::string>>...> filters{};
+  while (*run) {
+    const char *ret = fgets(buf.data(), sizeof(buf), _fp.get());
+    std::istringstream ss(buf.data());
+    std::string line;
+    if (ret == nullptr) {
+      continue;
+    }
+    while (std::getline(ss, line)) {
+      std::apply(
+          [&line](auto &...filter) {
+            (
+                [&] {
+                  if (filter.first.filter(line)) {
+                    filter.second.emplace_back(line);
+                  }
+                }(),
+                ...);
+          },
+          filters);
+      logFile << line << '\n';
+    }
+  }
+  Logger::close(std::move(_fp));
+  logFile.close();
+
+  std::error_code ec;
+  if (std::filesystem::file_size(logPath, ec) == 0) {
+    std::filesystem::remove(logPath, ec);
+    fmt::print("No log entries found for logger {}\n", Logger::NAME);
+    return;
+  }
+
+  std::apply(
+      [&directory](auto &...filter) {
+        (
+            [&] {
+              if (filter.second.empty()) {
+                return;
+              }
+              using FilterType = std::decay_t<decltype(filter.first)>;
+              FilterType::write(
+                  directory / fmt::format("{}.{}-{:%F-%T}.log", Logger::NAME,
+                                          FilterType::NAME,
+                                          std::chrono::system_clock::now()),
+                  filter.second);
+            }(),
+            ...);
+      },
+      filters);
+}
+
 namespace {
-// Logcat
-constexpr std::string_view LOGCAT_EXE = "/system/bin/logcat";
+constexpr std::string_view DEV_KMSG = "/dev/kmsg";
 
 void recordBootTime() {
   struct sysinfo x {};
-  std::chrono::seconds uptime;
   std::string logbuf;
-  using std::chrono::duration_cast;
-  using std::chrono::minutes;
   using std::chrono::seconds;
 
   if ((sysinfo(&x) == 0)) {
-    uptime = std::chrono::seconds(x.uptime);
-    logbuf = LOG_TAG ": Boot completed in ";
-    auto mins = duration_cast<minutes>(uptime);
-    if (mins.count() > 0) {
-      logbuf += std::to_string(mins.count()) + 'm' + ' ';
-    }
-    logbuf +=
-        std::to_string((uptime - duration_cast<seconds>(mins)).count()) + 's';
-    WriteStringToFile(logbuf, "/dev/kmsg");
+    logbuf = fmt::format("bootlogger: Boot completed in {:%Mm%Ss}",
+                         seconds(x.uptime));
+    WriteStringToFile(logbuf, DEV_KMSG.data());
   }
 }
 
 bool delAllAndRecreate(const std::filesystem::path &path) {
   std::error_code ec;
 
-  ALOGI("Deleting everything in %s", path.string().c_str());
-  if (fs::is_directory(path)) {
+  fmt::print("Deleting everything in {}\n", path.string());
+  if (fs::is_directory(path, ec)) {
     fs::remove_all(path, ec);
     if (ec) {
-      PLOGE("Failed to remove directory '%s': %s", path.string().c_str(),
-            ec.message().c_str());
+      fmt::print("Failed to remove directory '{}': {}\n", path.string(),
+                 ec.message());
       return false;
     }
   }
-  ALOGI("Recreating directory...");
+  puts("Recreating directory...");
   fs::create_directories(path, ec);
   if (ec) {
-    PLOGE("Failed to create directory '%s': %s", path.string().c_str(),
-          ec.message().c_str());
+    fmt::print("Failed to create directory '{}': {}\n", path.string(),
+               ec.message());
     return false;
   }
   return true;
@@ -310,26 +307,23 @@ bool delAllAndRecreate(const std::filesystem::path &path) {
 int main(int argc, const char **argv) {
   std::vector<std::thread> threads;
   std::atomic_bool run;
-  std::error_code ec;
-  KernelConfigType kConfig;
   bool system_log = false;
-  int rc;
   std::mutex lock;
   fs::path kLogDir;
 
   if (argc != 2) {
-    fprintf(stderr, "Usage: %s [log directory]\n", argv[0]);
+    fmt::print(stderr, "Usage: {} [log directory]\n", argv[0]);
     return EXIT_FAILURE;
   }
   kLogDir = argv[1];
   if (kLogDir.empty()) {
-    fprintf(stderr, "%s: Invalid empty string for log directory\n", argv[0]);
+    fmt::print(stderr, "{}: Invalid empty string for log directory\n", argv[0]);
     return EXIT_FAILURE;
   }
   umask(022);
 
   if (getenv("LOGGER_MODE_SYSTEM") != nullptr) {
-    ALOGI("Running in system log mode");
+    fmt::print("Running in system log mode\n");
     system_log = true;
   }
   if (system_log) {
@@ -338,21 +332,14 @@ int main(int argc, const char **argv) {
     kLogDir /= "boot";
   }
 
-  auto kAvcCtx = std::make_shared<std::vector<AvcContext>>();
-  auto kAvcFilter = std::make_shared<AvcFilterContext>(kAvcCtx, lock);
-  auto kLibcPropsFilter = std::make_shared<libcPropFilterContext>();
-  ALOGI("Logger starting with logdir '%s' ...", kLogDir.c_str());
+  fmt::print("Logger starting with logdir '{}' ...\n", kLogDir.string());
 
   // Determine audit support
-  rc = ReadKernelConfig(kConfig);
-  if (rc == 0) {
+  bool has_audit = false;
+  if (KernelConfigType kConfig; ReadKernelConfig(kConfig) == 0) {
     if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
-      ALOGD("Detected CONFIG_AUDIT=y in kernel configuration");
-    } else {
-      ALOGI("Kernel configuration does not have CONFIG_AUDIT=y, disabling avc "
-            "filters.");
-      kAvcFilter.reset();
-      kAvcCtx.reset();
+      puts("Detected CONFIG_AUDIT=y in kernel configuration");
+      has_audit = true;
     }
   }
 
@@ -361,22 +348,20 @@ int main(int argc, const char **argv) {
   }
 
   run = true;
-  LoggerContext kDmesgCtx = {
-      LoggerContext::FileHandle(fopen("/proc/kmsg", "r"), fclose), kLogDir,
-      "dmesg"};
-  LoggerContext kLogcatCtx = {
-      LoggerContext::FileHandle(popen(LOGCAT_EXE.data(), "r"), pclose), kLogDir,
-      "logcat"};
-
   // If this prop is true, logd logs kernel message to logcat
   // Don't make duplicate (Also it will race against kernel logs)
   if (!GetBoolProperty("ro.logd.kernel", false)) {
-    kDmesgCtx.registerLogFilter(kLogDir, kAvcFilter);
-    threads.emplace_back([&] { kDmesgCtx.startLogger(&run); });
+    threads.emplace_back([&] {
+      if (has_audit) {
+        start<Dmesg, FilterAvc, FilterAvcGen>(kLogDir, &run);
+      } else {
+        start<Dmesg>(kLogDir, &run);
+      }
+    });
   }
-  kLogcatCtx.registerLogFilter(kLogDir, kAvcFilter);
-  kLogcatCtx.registerLogFilter(kLogDir, kLibcPropsFilter);
-  threads.emplace_back([&] { kLogcatCtx.startLogger(&run); });
+  threads.emplace_back([&] {
+    start<Logcat, FilterAvc, FilterAvcGen, FilterLibc>(kLogDir, &run);
+  });
 
   if (system_log) {
     WaitForProperty(MAKE_LOGGER_PROP("enabled"), "false");
@@ -390,28 +375,6 @@ int main(int argc, const char **argv) {
   run = false;
   for (auto &i : threads) {
     i.join();
-  }
-
-  if (kAvcCtx) {
-    std::vector<std::string> allowrules;
-    OutputContext seGenCtx(kLogDir, "sepolicy.gen");
-
-    if (!seGenCtx) {
-      ALOGE("Failed to create sepolicy.gen");
-      return EXIT_FAILURE;
-    }
-
-    for (auto &e1 : *kAvcCtx) {
-      for (auto &e2 : *kAvcCtx) {
-        if (&e1 == &e2) {
-          continue;
-        }
-        e1 += e2;
-      }
-    }
-    std::stringstream ss;
-    ss << *kAvcCtx;
-    seGenCtx << ss.str();
   }
   return 0;
 }
