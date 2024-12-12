@@ -82,10 +82,9 @@ private:
 
 template <> struct fmt::formatter<SEContext> : formatter<string_view> {
   // parse is inherited from formatter<string_view>.
-  auto format(const SEContext &context,
-              format_context &ctx) const -> format_context::iterator {
-    return formatter<string_view>::format(static_cast<std::string>(context),
-                                          ctx);
+  static auto format(const SEContext &context,
+              format_context &ctx)  -> format_context::iterator {
+    return fmt::format_to(ctx.out(), "{}", static_cast<std::string>(context));
   }
 };
 
@@ -115,9 +114,10 @@ template <> struct fmt::formatter<AvcContexts> : formatter<string_view> {
                      format_context &ctx) -> format_context::iterator {
     AvcContexts filtered_contexts = std::move(context);
     auto en =
-        std::remove_if(filtered_contexts.begin(), filtered_contexts.end(), [](const auto &context) {
-          return context.stale || context.operation.size() == 0;
-        });
+        std::remove_if(filtered_contexts.begin(), filtered_contexts.end(),
+                       [](const auto &context) {
+                         return context.stale || context.operation.size() == 0;
+                       });
     filtered_contexts.resize(std::distance(filtered_contexts.begin(), en));
     return fmt::format_to(ctx.out(), "{}", fmt::join(filtered_contexts, "\n"));
   }
