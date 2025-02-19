@@ -21,7 +21,7 @@ import android.content.Context
 import android.content.Intent
 
 class BootCompletedReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent) {
-        context.startService(Intent(context, FlashService::class.java))
-    }
+  override fun onReceive(context: Context, intent: Intent) {
+    context.startService(Intent(context, FlashService::class.java))
+  }
 }
