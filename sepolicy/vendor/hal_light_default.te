@@ -1,2 +1,0 @@
-get_prop(hal_light_default, vendor_ext_light_prop);
-set_prop(hal_light_default, vendor_ext_light_prop);

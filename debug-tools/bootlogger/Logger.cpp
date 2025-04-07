@@ -387,12 +387,6 @@ int main(int argc, char **argv) {
     });
   }
 
-  std::ofstream timestamp(kLogDir / "TIMESTAMP");
-  if (timestamp.is_open()) {
-    timestamp << fmt::format("{:%F %T}", std::chrono::system_clock::now());
-  }
-  timestamp.close();
-
   threads.emplace_back(
       [&] { start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run); });
 

@@ -1,2 +1,0 @@
-type hal_samsung_camera_flashlight_service, hal_service_type, protected_service, service_manager_type;
-type hal_samsung_battery_service, hal_service_type, protected_service, service_manager_type;
