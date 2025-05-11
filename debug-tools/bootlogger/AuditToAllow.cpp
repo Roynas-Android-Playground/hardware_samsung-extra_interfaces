@@ -37,7 +37,7 @@ AvcContext::AvcContext(const std::string_view string) {
   bool ret = true;
 
   auto pos = string.find("avc:");
-  if (pos == std::string::npos) {
+  if (pos == std::string_view::npos) {
     return;
   }
 
