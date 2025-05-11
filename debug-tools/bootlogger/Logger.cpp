@@ -363,10 +363,13 @@ int main(int argc, char **argv) {
 
   // Determine audit support
   bool has_audit = false;
-  if (KernelConfigType kConfig; ReadKernelConfig(kConfig) == 0) {
-    if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
-      LOG(INFO) << "Detected CONFIG_AUDIT=y in kernel configuration";
-      has_audit = true;
+
+  if (GetBoolProperty(MAKE_LOGGER_PROP("audit_filter_enabled"), true)) {
+    if (KernelConfigType kConfig; ReadKernelConfig(kConfig) == 0) {
+      if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
+        LOG(INFO) << "Detected CONFIG_AUDIT=y in kernel configuration";
+        has_audit = true;
+      }
     }
   }
 
