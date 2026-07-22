@@ -1,9 +1,7 @@
 //
 // Copyright (C) 2023 Royna (@roynatech2544 on GH)
-//
 // SPDX-License-Identifier: Apache-2.0
 //
-
 cc_binary {
     name: "vendor.samsung_ext.framework.battery-service",
     relative_install_path: "hw",
@@ -12,6 +10,7 @@ cc_binary {
     srcs: [
         "JSONParser.cpp",
         "SmartCharge.cpp",
+        "SmartChargePolicy.cpp",
         "service.cpp",
     ],
     header_libs: ["libext_support"],
@@ -21,7 +20,6 @@ cc_binary {
         "libhidlbase",
         "liblog",
         "libutils",
-        "libsafestoi",
         "libjsoncpp",
         "android.hardware.health@2.0",
         "android.hardware.health-V1-ndk",

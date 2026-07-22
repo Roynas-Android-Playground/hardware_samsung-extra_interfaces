@@ -2,7 +2,7 @@
 
 #include <GetServiceSupport.h>
 #include <TestLogSupport.h>
-#include <SafeStoi.h>
+#include <android-base/parseint.h>
 
 using aidl::vendor::samsung_ext::framework::battery::ISmartCharge;
 
@@ -12,31 +12,37 @@ int main(int argc, const char **argv) {
     fprintf(stderr, "           cmd_num -> 1: setChargeLimit, 2: activate\n");
     return 1;
   }
-  auto svc = getServiceDefault<ISmartCharge>();
-  if (!svc) {
+
+  int command = 0;
+  int arg1 = 0;
+  int arg2 = 0;
+  if (!android::base::ParseInt(argv[1], &command) ||
+      !android::base::ParseInt(argv[2], &arg1) ||
+      !android::base::ParseInt(argv[3], &arg2)) {
+    fprintf(stderr, "Failed to parse arguments as strict integers\n");
+    return 1;
+  }
+
+  auto service = getServiceDefault<ISmartCharge>();
+  if (!service) {
     fprintf(stderr, "getService returned null\n");
     return 1;
   }
-  int arg1, arg2, arg3;
-  arg1 = stoi_safe(argv[1]);
-  arg2 = stoi_safe(argv[2]);
-  arg3 = stoi_safe(argv[3]);
-  if (arg1 < 0 || arg2 < 0 || arg3 < 0) {
-    fprintf(stderr, "Failed to parse arguments to int or is invalid input\n");
-    return 1;
+
+  switch (command) {
+    case 1:
+      TEST_LOG2(service, setChargeLimit, arg1, arg2);
+      break;
+    case 2:
+      if ((arg1 != 0 && arg1 != 1) || (arg2 != 0 && arg2 != 1)) {
+        fprintf(stderr, "activate arguments must be 0 or 1\n");
+        return 1;
+      }
+      TEST_LOG2(service, activate, arg1 != 0, arg2 != 0);
+      break;
+    default:
+      fprintf(stderr, "Unsupported cmd: %d\n", command);
+      return 1;
   }
-  switch (arg1) {
-  case 1: {
-    TEST_LOG2(svc, setChargeLimit, arg2, arg3);
-    break;
-  }
-  case 2: {
-    TEST_LOG2(svc, activate, !!arg2, !!arg3);
-    break;
-  }
-  default: {
-    fprintf(stderr, "Unsupported cmd: %d\n", arg1);
-    break;
-  }
-  }
+  return 0;
 }

@@ -1,0 +1,6 @@
+# CMake builds
+/build*/
+/manual-tests/
+
+# Clangd cache
+*.idx

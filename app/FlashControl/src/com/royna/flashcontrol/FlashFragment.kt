@@ -1,22 +1,9 @@
 /*
  * Copyright (C) 2022 The LineageOS Project
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * Licensed under the Apache License, Version 2.0
  */
-
 package com.royna.flashcontrol
 
-import android.content.SharedPreferences
 import android.database.ContentObserver
 import android.os.Bundle
 import android.os.Handler
@@ -25,206 +12,187 @@ import android.os.ServiceManager
 import android.provider.Settings
 import android.util.Log
 import android.widget.CompoundButton
-import android.widget.CompoundButton.OnCheckedChangeListener
 import android.widget.Toast
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.PreferenceManager
 import com.android.settingslib.widget.MainSwitchPreference
 import com.android.settingslib.widget.SelectorWithWidgetPreference
-import java.lang.IllegalStateException
 import vendor.samsung_ext.hardware.camera.flashlight.IFlashlight
 
-class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
-
+class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChangeListener {
   private lateinit var switchBar: MainSwitchPreference
-  private val mService: IFlashlight? =
+  private val service: IFlashlight? =
     IFlashlight.Stub.asInterface(
       ServiceManager.waitForDeclaredService(
-        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"
-      )
+        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default",
+      ),
     )
-  private lateinit var mSharedPreferences: SharedPreferences
-  private lateinit var mCurrentIntensity: Preference
-  private lateinit var mCurrentOn: Preference
+  private lateinit var currentIntensity: Preference
+  private lateinit var currentOn: Preference
 
   override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
     addPreferencesFromResource(R.xml.flash_settings)
 
-    mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
-
     switchBar = findPreference<MainSwitchPreference>(PREF_FLASH_ENABLE)!!
     switchBar.addOnSwitchChangeListener(this)
-    val mBrightness =
-      try {
-        mService!!.getCurrentBrightness()
-      } catch (e: Exception) {
-        if (e is NullPointerException) {
-          0
-        } else if (e is IllegalStateException) {
-          Log.e(TAG, "IllegalStateException on getCurrentBrightness", e)
-          0
-        } else {
-          throw e // rethrow if it's not one of the expected exceptions
-        }
-      }
-    val mSettingBrightness =
+
+    val state = runCatching { service?.state }.getOrNull()
+    val frameworkFlashEnabled =
       Settings.Secure.getInt(
         requireContext().contentResolver,
         Settings.Secure.FLASHLIGHT_ENABLED,
         0,
-      )
-    switchBar.isChecked = mBrightness != 0
-    switchBar.isEnabled = mSettingBrightness == 0
+      ) != 0
 
-    val mSavedIntensity = mSharedPreferences.getInt(PREF_FLASH_INTENSITY, 1)
+    switchBar.isChecked = state?.enabled ?: false
+    switchBar.isEnabled = !frameworkFlashEnabled
+    val rememberedBrightness = state?.brightnessLevel ?: 1
 
     for ((key, value) in PREF_FLASH_MODES) {
       val preference = findPreference<SelectorWithWidgetPreference>(key)!!
-      preference.isChecked = value == mSavedIntensity
-      preference.isEnabled = switchBar.isChecked
+      preference.isChecked = value == rememberedBrightness
+      preference.isEnabled = state?.enabled == true
       preference.setOnPreferenceClickListener {
         setIntensity(value)
-        mSharedPreferences.edit().putInt(PREF_FLASH_INTENSITY, value).apply()
         true
       }
     }
-    mCurrentOn = findPreference<Preference>(PREF_FLASH_CURRENT_ON)!!
-    mCurrentIntensity = findPreference<Preference>(PREF_FLASH_CURRENT_INTENSITY)!!
-    requireContext().contentResolver.registerContentObserver(mFlashUrl, false, mSettingsObserver)
+
+    currentOn = findPreference(PREF_FLASH_CURRENT_ON)!!
+    currentIntensity = findPreference(PREF_FLASH_CURRENT_INTENSITY)!!
+    updateStateView(state?.enabled ?: false, rememberedBrightness)
+    requireContext().contentResolver.registerContentObserver(flashUrl, false, settingsObserver)
   }
 
-  private fun changeIntensityView(b: Int) {
-    mCurrentIntensity.title =
-      String.format(requireContext().getString(R.string.flash_current_intensity), b)
+  private fun changeIntensityView(level: Int) {
+    currentIntensity.title = getString(R.string.flash_current_intensity, level)
   }
 
-  private fun changeOnOffView(b: Boolean) {
-    mCurrentOn.title =
-      String.format(
-        requireContext().getString(R.string.flash_current_on),
-        requireContext().getString(if (b) R.string.on else R.string.off),
+  private fun changeOnOffView(enabled: Boolean) {
+    currentOn.title =
+      getString(
+        R.string.flash_current_on,
+        getString(if (enabled) R.string.on else R.string.off),
       )
   }
 
-  private fun getSettingFlash() =
-    Settings.Secure.getInt(requireContext().contentResolver, Settings.Secure.FLASHLIGHT_ENABLED)
-
-  override fun onResume() {
-    super.onResume()
-    val mBrightness = mService?.getCurrentBrightness() ?: 0
-    changeIntensityView(mBrightness)
-    changeOnOffView(mBrightness != 0)
-    val isSettingOn = getSettingFlash() != 0
-    if (!isSettingOn) {
-      switchBar.apply {
-        setChecked(mBrightness != 0)
-        isEnabled = mBrightness == 0
-      }
+  private fun updateStateView(enabled: Boolean, brightness: Int) {
+    changeOnOffView(enabled)
+    changeIntensityView(brightness)
+    changeRadioButtons(enabled)
+    for ((key, value) in PREF_FLASH_MODES) {
+      findPreference<SelectorWithWidgetPreference>(key)!!.isChecked = value == brightness
     }
   }
 
-  private val mSettingsObserver =
+  private fun frameworkFlashEnabled(): Boolean =
+    Settings.Secure.getInt(
+      requireContext().contentResolver,
+      Settings.Secure.FLASHLIGHT_ENABLED,
+      0,
+    ) != 0
+
+  override fun onResume() {
+    super.onResume()
+    val state = runCatching { service?.state }
+      .onFailure { Log.e(TAG, "Failed to query flashlight state", it) }
+      .getOrNull()
+    val enabled = state?.enabled ?: false
+    val brightness = state?.brightnessLevel ?: 1
+    updateStateView(enabled, brightness)
+    switchBar.setChecked(enabled)
+    switchBar.isEnabled = !frameworkFlashEnabled()
+  }
+
+  private val settingsObserver =
     object : ContentObserver(Handler(Looper.getMainLooper())) {
       override fun onChange(selfChange: Boolean) {
         super.onChange(selfChange)
         if (context == null) return
-        try {
-          val mMainHandler = Handler(Looper.getMainLooper())
-          val mEnabled = getSettingFlash()
-          when (mEnabled) {
-            0 ->
-              mMainHandler.post {
-                switchBar.setChecked(false)
-                switchBar.isEnabled = true
-                changeOnOffView(false)
-              }
-            1 ->
-              mMainHandler.post {
-                switchBar.setChecked(true)
-                switchBar.isEnabled = false
-                Toast.makeText(requireContext(), R.string.disabled_qs, Toast.LENGTH_SHORT).show()
-              }
-            else -> return@onChange
-          }
-          changeRadioButtons(mEnabled == 1)
-        } catch (e: Settings.SettingNotFoundException) {
-          e.printStackTrace()
+
+        val frameworkEnabled = runCatching { frameworkFlashEnabled() }.getOrDefault(false)
+        val state = runCatching { service?.state }.getOrNull()
+        val enabled = state?.enabled ?: frameworkEnabled
+        val brightness = state?.brightnessLevel ?: 1
+        switchBar.setChecked(enabled)
+        switchBar.isEnabled = !frameworkEnabled
+        updateStateView(enabled, brightness)
+        if (frameworkEnabled) {
+          Toast.makeText(requireContext(), R.string.disabled_qs, Toast.LENGTH_SHORT).show()
         }
       }
     }
 
   override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
-    if (mService == null) {
-      Log.e(TAG, "mService is null...")
-      buttonView.setChecked(false)
+    val activeService = service
+    if (activeService == null) {
+      Log.e(TAG, "Flashlight service is unavailable")
+      buttonView.isChecked = false
       return
     }
-    try {
-      mService.enableFlash(isChecked)
-    } catch (e: IllegalStateException) {
-      Log.w(TAG, "enableFlash() failed")
-      buttonView.setChecked(false)
-      return
+
+    runCatching {
+      activeService.enableFlash(isChecked)
+      activeService.state
+    }.onSuccess { state ->
+      updateStateView(state.enabled, state.brightnessLevel)
+    }.onFailure {
+      Log.w(TAG, "enableFlash($isChecked) failed", it)
+      buttonView.isChecked = !isChecked
     }
-    val kBright = mService.getCurrentBrightness()
-    changeOnOffView(isChecked)
-    changeIntensityView(kBright)
-    setIntensity(kBright)
-    changeRadioButtons(isChecked)
   }
 
   private fun changeRadioButtons(enable: Boolean) {
     for ((key, _) in PREF_FLASH_MODES) {
-      val mPreference = findPreference<SelectorWithWidgetPreference>(key)!!
-      mPreference.isEnabled = enable
+      findPreference<SelectorWithWidgetPreference>(key)!!.isEnabled = enable
     }
   }
 
   private fun setIntensity(intensity: Int) {
-    if (intensity < 1 || intensity > 5) {
-      Log.e(TAG, "Invalid intensity $intensity")
+    val activeService = service
+    if (intensity !in 1..5 || activeService == null) {
+      Log.e(TAG, "Invalid intensity or unavailable service: $intensity")
       return
     }
-    if (mService == null) {
-      Log.e(TAG, "mService is null...")
-      return
+
+    runCatching {
+      activeService.setBrightness(intensity)
+      activeService.state
+    }.onSuccess { state ->
+      updateStateView(state.enabled, state.brightnessLevel)
+    }.onFailure {
+      Log.e(TAG, "Failed to set flashlight intensity $intensity", it)
     }
-    mService.setBrightness(intensity)
-    for ((key, value) in PREF_FLASH_MODES) {
-      val preference = findPreference<SelectorWithWidgetPreference>(key)!!
-      preference.isChecked = value == intensity
-    }
-    mSharedPreferences.edit().putInt(PREF_FLASH_INTENSITY, intensity).apply()
-    changeIntensityView(mService.getCurrentBrightness())
   }
 
   override fun onPause() {
     super.onPause()
-    beGoneFlash()
+    disableAppOwnedFlash()
   }
 
   override fun onStop() {
     super.onStop()
-    beGoneFlash()
+    disableAppOwnedFlash()
   }
 
-  private fun beGoneFlash() {
-    if (getSettingFlash() == 0 && mService?.getCurrentBrightness() ?: 0 != 0) {
-      mService?.enableFlash(false)
+  private fun disableAppOwnedFlash() {
+    val state = runCatching { service?.state }.getOrNull() ?: return
+    if (!frameworkFlashEnabled() && state.enabled) {
+      runCatching { service?.enableFlash(false) }
+        .onFailure { Log.w(TAG, "Failed to disable flashlight", it) }
     }
   }
 
   override fun onDestroy() {
+    requireContext().contentResolver.unregisterContentObserver(settingsObserver)
     super.onDestroy()
-    requireContext().contentResolver.unregisterContentObserver(mSettingsObserver)
   }
 
   companion object {
     private const val PREF_FLASH_ENABLE = "flash_enable"
-    const val PREF_FLASH_INTENSITY = "flash_intensity"
     private const val PREF_FLASH_CURRENT_ON = "flash_current_on"
     private const val PREF_FLASH_CURRENT_INTENSITY = "flash_current_intensity"
+    private const val TAG = "FlashCtrl"
     val PREF_FLASH_MODES =
       mapOf(
         "flash_intensity_1" to 1,
@@ -233,7 +201,6 @@ class FlashFragment : PreferenceFragmentCompat(), OnCheckedChangeListener {
         "flash_intensity_4" to 4,
         "flash_intensity_5" to 5,
       )
-    private const val TAG = "FlashCtrl"
-    val mFlashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)
+    val flashUrl = Settings.Secure.getUriFor(Settings.Secure.FLASHLIGHT_ENABLED)
   }
 }

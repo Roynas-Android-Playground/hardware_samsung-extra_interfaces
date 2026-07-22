@@ -1,0 +1,3 @@
+I bootlogger-test: ordinary synthetic log line
+W test_app: type=1400 audit(0.0:1): avc: denied { search } for name="synthetic" scontext=u:r:untrusted_app:s0 tcontext=u:object_r:sysfs:s0 tclass=dir permissive=0
+W audioserver: type=1400 audit(0.0:2): avc: denied { read open } for name="synthetic device" scontext=u:r:audioserver:s0 tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0

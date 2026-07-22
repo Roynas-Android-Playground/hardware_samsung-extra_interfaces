@@ -1,46 +1,37 @@
-#include <json/json.h>
+#pragma once
+
 #include <functional>
+#include <json/json.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 class ConfigParser {
-public:
-  struct SearchEntry;
-
-private:
-  Json::Value root;
-  struct Handler {
-    std::function<void(const std::string &, const std::string &)> handler;
-    std::string name;
-  };
-
-  static void handler_OpenFile(const std::string &node,
-                               const std::string &data);
-
-  static void handler_WriteFile(const std::string &node,
-                                const std::string &data);
-
-  // Takes a node path and data
-  using HandlerFunction =
-      std::function<void(const std::string &, const std::string &)>;
-  // Takes name and handler function
-  using HandlerType = std::pair<std::string, HandlerFunction>;
-
-  std::vector<HandlerType> m_handlers = {
-      {"OpenFile", handler_OpenFile},
-      {"WriteFile", handler_WriteFile},
-  };
-
-  enum class MatchQuality { EXACT, MATCHES_VENDOR, NO_MATCH };
-
-  // Returns a pair with the matching device and its match quality.
-  std::pair<Json::Value, MatchQuality> lookupEntry(const SearchEntry &search);
-
-public:
-  ConfigParser(const std::string &path);
-
+ public:
   struct SearchEntry {
     std::string codename;
     std::string vendor;
   };
+  using ActionFunction = std::function<bool(bool)>;
 
-  std::function<void(bool)> findEntry(const SearchEntry &search);
+  explicit ConfigParser(const std::string &path);
+  ActionFunction findEntry(const SearchEntry &search);
+
+ private:
+  using HandlerFunction =
+      std::function<bool(const std::string &, const std::string &)>;
+  using HandlerType = std::pair<std::string, HandlerFunction>;
+  enum class MatchQuality { EXACT, MATCHES_VENDOR, NO_MATCH };
+
+  static bool handler_OpenFile(const std::string &node,
+                               const std::string &data);
+  static bool handler_WriteFile(const std::string &node,
+                                const std::string &data);
+  std::pair<Json::Value, MatchQuality> lookupEntry(const SearchEntry &search);
+
+  Json::Value root_;
+  std::vector<HandlerType> handlers_ = {
+      {"OpenFile", handler_OpenFile},
+      {"WriteFile", handler_WriteFile},
+  };
 };

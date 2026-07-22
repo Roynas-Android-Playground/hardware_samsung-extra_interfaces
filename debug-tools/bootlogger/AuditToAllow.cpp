@@ -1,144 +1,167 @@
-#include <fmt/core.h>
-#include <fmt/format.h>
+#include "LoggerInternal.h"
+
+#include <algorithm>
 #include <regex>
 #include <sstream>
-#include <string>
-#include <vector>
-
-#include "LoggerInternal.h"
+#include <tuple>
 
 namespace {
 
-inline std::string TrimDoubleQuote(const std::string &str) {
-  if (str.size() > 2) { // At least one character inside quotes
-    if (str.front() == '"' && str.back() == '"') {
-      return str.substr(1, str.size() - 2);
-    }
+std::string Unquote(std::string value) {
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+    return value.substr(1, value.size() - 2);
   }
-  return str;
+  return value;
 }
 
-} // namespace
-
-SEContext::SEContext(std::string context) : m_context(std::move(context)) {
-  const static std::regex kSEContextRegex(
-      R"(^u:(object_)?r:([\w-]+):s0(.+)?$)");
-
-  std::smatch match;
-  if (std::regex_match(m_context, match, kSEContextRegex,
-                       std::regex_constants::format_sed)) {
-    m_context = match.str(2);
+bool ParseBoolean(const std::string &value, bool *out) {
+  if (value == "0") {
+    *out = false;
+    return true;
   }
-}
-
-AvcContext::AvcContext(const std::string_view string) {
-  std::string line;
-  std::vector<std::string> lines;
-  bool ret = true;
-
-  auto pos = string.find("avc:");
-  if (pos == std::string_view::npos) {
-    return;
-  }
-
-  std::istringstream iss(std::string(string.substr(pos)));
-  while ((iss >> line)) {
-    lines.emplace_back(line);
-  }
-  auto it = lines.begin();
-  ++it; // Skip avc:
-  if (*it == "granted") {
-    granted = true;
-  } else if (*it == "denied") {
-    granted = false;
-  } else {
-    LOG(WARNING) << "Unknown value for ACL status: " << *it;
-    return;
-  }
-  ++it; // Now move onto next
-  ++it; // Skip opening bracelet
-  do {
-    operation.insert(*it);
-  } while (*(++it) != "}");
-  ++it; // Skip ending bracelet
-  ++it; // Skip 'for'
-  if (it == lines.end()) {
-    LOG(WARNING) << "Invalid input: " << string;
-    return;
-  }
-  do {
-    auto idx = it->find('=');
-    if (idx == std::string::npos) {
-      LOG(WARNING) << "Unparsable attribute: " << *it;
-      continue;
-    }
-    misc_attributes.emplace(it->substr(0, idx),
-                            TrimDoubleQuote(it->substr(idx + 1)));
-  } while (++it != lines.end());
-
-  // Bitwise AND, ret will be set to 0 if any of the calls return false(0)
-  auto pit = misc_attributes.find("permissive");
-  ret &= findOrDie(scontext, "scontext");
-  ret &= findOrDie(tcontext, "tcontext");
-  ret &= findOrDie(tclass, "tclass");
-  ret &= pit != misc_attributes.end();
-  // If still vaild
-  if (ret) {
-    bool found = false;
-    int x = 0;
-    if (std::stringstream(pit->second) >> x) {
-      if (x == 0 || x == 1) {
-        permissive = (x != 0);
-        misc_attributes.erase(pit);
-        found = true;
-      }
-    }
-    if (!found) {
-      LOG(WARNING) << "Invalid permissive status: " << pit->second;
-      ret = false;
-    }
-  }
-  if (ret) {
-    stale = false;
-  } else {
-    LOG(ERROR) << "Failed to parse: " << string;
-  }
-}
-
-bool AvcContext::findOrDie(std::string &dest, const std::string &key) {
-  auto it = misc_attributes.find(key);
-  bool ret = it != misc_attributes.end();
-
-  if (ret) {
-    dest = it->second;
-    misc_attributes.erase(it);
-  } else {
-    LOG(WARNING) << "Empty value for key: " << key;
-  }
-  return ret;
-}
-
-bool AvcContext::findOrDie(SEContext &dest, const std::string &key) {
-  std::string value;
-  if (findOrDie(value, key)) {
-    dest = SEContext(value);
+  if (value == "1") {
+    *out = true;
     return true;
   }
   return false;
 }
 
-AvcContext &AvcContext::operator+=(AvcContext &other) {
-  if (!stale && !other.stale) {
-    bool mergable = true;
-    mergable &= granted == other.granted;
-    mergable &= scontext == other.scontext;
-    mergable &= tcontext == other.tcontext;
-    mergable &= tclass == other.tclass;
-    // TODO: Check for misc_attributes?
-    if (mergable) {
-      other.stale = true;
-      operation.insert(other.operation.begin(), other.operation.end());
+}  // namespace
+
+SEContext::SEContext(std::string context) : m_context(std::move(context)) {
+  static const std::regex kSEContextRegex(
+      R"(^u:(?:object_)?r:([\w-]+):s0(?:.*)?$)",
+      std::regex::ECMAScript);
+  std::smatch match;
+  if (std::regex_match(m_context, match, kSEContextRegex)) {
+    m_context = match.str(1);
+  }
+}
+
+AvcContext::AvcContext(std::string_view input) {
+  static const std::regex kAvcRegex(
+      R"(avc:\s+(granted|denied)\s+\{\s*([^}]*)\}\s+for\s+(.*)$)",
+      std::regex::ECMAScript);
+  static const std::regex kAttributeRegex(
+      R"(([A-Za-z_][A-Za-z0-9_]*)=("[^"]*"|\S+))",
+      std::regex::ECMAScript);
+
+  const std::string line(input);
+  std::smatch match;
+  if (!std::regex_search(line, match, kAvcRegex)) {
+    return;
+  }
+
+  granted = match.str(1) == "granted";
+
+  std::istringstream operationStream(match.str(2));
+  for (std::string operation; operationStream >> operation;) {
+    operations.insert(std::move(operation));
+  }
+  if (operations.empty()) {
+    return;
+  }
+
+  const std::string attributes = match.str(3);
+  for (std::sregex_iterator it(attributes.begin(), attributes.end(),
+                               kAttributeRegex),
+       end;
+       it != end; ++it) {
+    misc_attributes.emplace((*it).str(1), Unquote((*it).str(2)));
+  }
+
+  const auto source = misc_attributes.find("scontext");
+  const auto target = misc_attributes.find("tcontext");
+  const auto klass = misc_attributes.find("tclass");
+  if (source == misc_attributes.end() || target == misc_attributes.end() ||
+      klass == misc_attributes.end()) {
+    return;
+  }
+
+  scontext = SEContext(source->second);
+  tcontext = SEContext(target->second);
+  tclass = klass->second;
+  misc_attributes.erase(source);
+  misc_attributes.erase(target);
+  misc_attributes.erase(klass);
+
+  if (const auto it = misc_attributes.find("permissive");
+      it != misc_attributes.end()) {
+    if (!ParseBoolean(it->second, &permissive)) {
+      return;
+    }
+    misc_attributes.erase(it);
+  }
+
+  valid = !scontext.name().empty() && !tcontext.name().empty() &&
+          !tclass.empty();
+}
+
+bool AvcContext::isUntrustedApp() const {
+  return scontext.name().find("untrusted_app") != std::string::npos;
+}
+
+bool AvcContext::mergeFrom(AvcContext &other) {
+  if (!valid || !other.valid || consumed || other.consumed ||
+      granted != other.granted || !(scontext == other.scontext) ||
+      !(tcontext == other.tcontext) || tclass != other.tclass) {
+    return false;
+  }
+
+  operations.insert(other.operations.begin(), other.operations.end());
+  other.consumed = true;
+  return true;
+}
+
+std::string AvcContext::toAllowRule() const {
+  if (!isDenied() || consumed || operations.empty()) {
+    return {};
+  }
+
+  std::ostringstream out;
+  out << "allow " << scontext.name() << ' ' << tcontext.name() << ':' << tclass
+      << ' ';
+  if (operations.size() == 1) {
+    out << *operations.begin();
+  } else {
+    out << "{ ";
+    for (const auto &operation : operations) {
+      out << operation << ' ';
+    }
+    out << '}';
+  }
+  out << ';';
+  return out.str();
+}
+
+std::string FormatAllowSuggestions(AvcContexts contexts) {
+  for (std::size_t i = 0; i < contexts.size(); ++i) {
+    if (!contexts[i].isDenied() || contexts[i].isUntrustedApp()) {
+      contexts[i].consumed = true;
+      continue;
+    }
+    for (std::size_t j = i + 1; j < contexts.size(); ++j) {
+      (void)contexts[i].mergeFrom(contexts[j]);
     }
   }
-  return *this;
+
+  std::sort(contexts.begin(), contexts.end(), [](const auto &left,
+                                                  const auto &right) {
+    return std::tie(left.scontext.name(), left.tcontext.name(), left.tclass) <
+           std::tie(right.scontext.name(), right.tcontext.name(), right.tclass);
+  });
+
+  std::ostringstream out;
+  out << "# Diagnostic suggestions generated from observed SELinux denials.\n"
+      << "# Review labels, macros, neverallow rules, and access intent before "
+         "using any rule.\n"
+      << "# Do not copy these rules blindly into production policy.\n\n";
+
+  for (const auto &context : contexts) {
+    const auto rule = context.toAllowRule();
+    if (!rule.empty()) {
+      out << rule << '\n';
+    }
+  }
+  return out.str();
 }

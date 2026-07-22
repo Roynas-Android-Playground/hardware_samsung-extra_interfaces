@@ -5,13 +5,13 @@ cc_binary {
     vintf_fragments: ["vendor.samsung_ext.hardware.camera.flashlight-service.xml"],
     srcs: [
         "Flashlight.cpp",
+        "FlashlightCodec.cpp",
         "service.cpp",
     ],
     shared_libs: [
         "libbase",
         "libbinder_ndk",
-        "libsafestoi",
-        "vendor.samsung_ext.hardware.camera.flashlight-V1-ndk",
+        "vendor.samsung_ext.hardware.camera.flashlight-V2-ndk",
     ],
     system_ext_specific: true,
 }

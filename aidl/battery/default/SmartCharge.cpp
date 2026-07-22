@@ -1,423 +1,332 @@
 /*
  * Copyright (C) 2023 The LineageOS Project
- *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #include "SmartCharge.h"
-#include "JSONParser.hpp"
 
 #include <GetServiceSupport.h>
-#include <SafeStoi.h>
-
 #include <android-base/logging.h>
 #include <android-base/properties.h>
 #include <hidl/HidlTransportSupport.h>
-#include <log/log.h>
 
+#include <cerrno>
 #include <chrono>
-#include <functional>
-#include <sstream>
-#include <type_traits>
+#include <cstdio>
+#include <utility>
 
-namespace aidl {
-namespace vendor {
-namespace samsung_ext {
-namespace framework {
-namespace battery {
-
-using ::android::base::GetProperty;
-using ::android::base::SetProperty;
-
-using ScopedLock = const std::lock_guard<std::mutex>;
-
+namespace aidl::vendor::samsung_ext::framework::battery {
+namespace {
 using namespace std::chrono_literals;
-
-static constexpr int kInvalidCfg = -1;
-
-static const char kSmartChargeConfigProp[] = "persist.ext.smartcharge.config";
-static const char kSmartChargeEnabledProp[] = "persist.ext.smartcharge.enabled";
-static const char kComma = ',';
-
-template <typename T>
-using is_integral_or_bool =
-    std::enable_if_t<std::is_integral_v<T> || std::is_same_v<T, bool>, bool>;
-
-static inline bool isValidBool(const int val) { return val == !!val; }
-static inline bool verifyConfig(const int lower, const int upper) {
-  return !(upper <= lower || upper > 95 || (0 <= lower && lower < 50));
+constexpr char kConfigProp[] = "persist.ext.smartcharge.config";
+constexpr char kEnabledProp[] = "persist.ext.smartcharge.enabled";
+constexpr char kConfigPath[] = "/system_ext/etc/smartcharge_nodes.json";
+constexpr char kDisabled[] = "0,0";
+std::string Pair(int a, int b) { return std::to_string(a) + "," + std::to_string(b); }
+ndk::ScopedAStatus PropertyError(const char *message) {
+  return ndk::ScopedAStatus::fromServiceSpecificErrorWithMessage(
+      errno == 0 ? EIO : errno, message);
 }
-
-template <typename T, is_integral_or_bool<T> = true> struct ConfigPair {
-  T first, second;
-  std::string toString(void) {
-    return std::to_string(first) + kComma + std::to_string(second);
-  }
-};
-
-template <typename U>
-bool fromString(const std::string &v, ConfigPair<U> *pair) {
-  std::stringstream ss(v);
-  std::string res;
-
-  if (v.find(kComma) != std::string::npos) {
-    getline(ss, res, kComma);
-    pair->first = stoi_safe(res);
-    getline(ss, res, kComma);
-    pair->second = stoi_safe(res);
-    return true;
-  }
-  return false;
+void OnAidlHealthDied(void *cookie) {
+  if (auto *service = static_cast<SmartCharge *>(cookie)) service->reloadHealthService();
 }
+}  // namespace
 
-template <> bool fromString(const std::string &v, ConfigPair<bool> *pair) {
-  ConfigPair<int> tmp{};
-  if (fromString<int>(v, &tmp) && isValidBool(tmp.first) &&
-      isValidBool(tmp.second)) {
-    pair->first = tmp.first;
-    pair->second = tmp.second;
-    return true;
-  }
-  return false;
-}
-
-template <typename U> bool getAndParse(const char *prop, ConfigPair<U> *pair) {
-  std::string propval = GetProperty(prop, "");
-  if (!propval.empty()) {
-    return fromString(propval, pair);
-  }
-  return false;
-}
-
-const static auto kDisabledCfgStr = ConfigPair<bool>{0, 0}.toString();
-
-static void onServiceDied(void *cookie) {
-  reinterpret_cast<SmartCharge *>(cookie)->loadHealthImpl();
-}
-
-void SmartCharge::loadHealthImpl(void) {
-  bool linkToDeathSuccess;
-  std::string reason;
-  ScopedLock _(hal_health_lock);
-
-  // Try aidl
-  health_aidl = waitServiceDefault<IHealthAIDL>();
-  if (health_aidl == nullptr) {
-    // hidl
-    health_hidl = ::android::hardware::health::V2_0::get_health_service();
-    if (health_hidl != nullptr) {
-      healthState = USE_HEALTH_HIDL;
-      ALOGD("%s: Connected to health HIDL V2.0 HAL", __func__);
-      hidl_death_recp = new hidl_health_death_recipient(health_hidl);
-      auto ret = health_hidl->linkToDeath(hidl_death_recp,
-                                          reinterpret_cast<uint64_t>(this));
-      linkToDeathSuccess = ret.isOk();
-      reason = ret.description();
-    } else {
-      LOG_ALWAYS_FATAL("Failed to connect to any valid health HAL");
-    }
-  } else {
-    healthState = USE_HEALTH_AIDL;
-    ALOGD("%s: Connected to health AIDL HAL", __func__);
-    aidl_death_recp = ndk::ScopedAIBinder_DeathRecipient(
-        AIBinder_DeathRecipient_new(onServiceDied));
-    auto ret = AIBinder_linkToDeath(health_aidl->asBinder().get(),
-                                    aidl_death_recp.get(), this);
-    linkToDeathSuccess = ret == STATUS_OK;
-    reason = ndk::ScopedAStatus(AStatus_fromStatus(ret)).getDescription();
-  }
-  if (!linkToDeathSuccess)
-    ALOGW("%s: linkToDeath failed: %s", __func__, reason.c_str());
-}
-
-bool SmartCharge::loadAndParseConfigProp(void) {
-  ConfigPair<int> ret{};
-  if (getAndParse(kSmartChargeConfigProp, &ret) &&
-      verifyConfig(ret.first, ret.second)) {
-    upper = ret.second;
-    lower = ret.first;
-    ALOGD("%s: upper: %d, lower: %d", __func__, upper, lower);
-  } else {
-    upper = kInvalidCfg;
-    lower = kInvalidCfg;
-    ALOGW("%s: Parsing config failed", __func__);
-    return false;
-  }
-  return true;
-}
-
-void SmartCharge::loadConfiguration(void) {
-  ConfigParser parser("/system_ext/etc/smartcharge_nodes.json");
-
-  setChargableFunc = parser.findEntry({GetProperty("ro.product.device", ""),
-                                       GetProperty("ro.product.manufacturer", "")});
-  if (!setChargableFunc) {
-    ALOGD("%s: Using stub for setChargableFunc", __func__);
-    setChargableFunc = [](const bool) {};
-  }
-}
-
-void SmartCharge::loadEnabledAndStart(void) {
-  ConfigPair<bool> ret{};
-
-  if (getAndParse(kSmartChargeEnabledProp, &ret)) {
-    if (ret.first) {
-      ALOGD("%s: Starting loop, withrestart: %d", __func__, ret.second);
-      createLoopThread(ret.second);
-    } else
-      ALOGD("%s: Not starting loop", __func__);
-  } else {
-    ALOGE("%s: Enabled prop value invalid, resetting to valid one", __func__);
-    SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
-  }
-}
-
-SmartCharge::SmartCharge(void) {
-  bool ret;
-
-  loadHealthImpl();
+SmartCharge::SmartCharge() {
   loadConfiguration();
-
-  ret = loadAndParseConfigProp();
-  if (ret) {
-    loadEnabledAndStart();
-  }
+  connectHealthService();
+  loadPersistedState();
 }
 
-void SmartCharge::startLoop(bool withrestart) {
-  ChargeStatus current, policy;
-  bool skip = false;
-
-  ALOGD("%s: ++", __func__);
-  std::unique_lock<std::mutex> lock(kCVLock);
-  while (true) {
-    int per;
-
-    switch (healthState) {
-    case USE_HEALTH_AIDL: {
-      using android::hardware::health::BatteryStatus;
-
-      ScopedLock _(hal_health_lock);
-      BatteryStatus status_aidl = BatteryStatus::UNKNOWN;
-      auto ret = health_aidl->getCapacity(&per);
-      if (!ret.isOk()) {
-        per = ret.getStatus();
-        break;
-      }
-      ret = health_aidl->getChargeStatus(&status_aidl);
-      if (!ret.isOk()) {
-        per = ret.getStatus();
-        break;
-      }
-      switch (status_aidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-        break;
-      default:
-        break;
-      };
-      break;
-    }
-    case USE_HEALTH_HIDL: {
-      using ::android::hardware::health::V1_0::BatteryStatus;
-      using ::android::hardware::health::V2_0::Result;
-
-      ScopedLock _(hal_health_lock);
-      Result res = Result::UNKNOWN;
-      BatteryStatus status_hidl = BatteryStatus::UNKNOWN;
-      health_hidl->getCapacity([&res, &per](Result hal_res, int32_t hal_value) {
-        res = hal_res;
-        per = hal_value;
-      });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      health_hidl->getChargeStatus(
-          [&res, &status_hidl](Result hal_res, BatteryStatus hal_value) {
-            res = hal_res;
-            status_hidl = hal_value;
-          });
-      if (res != Result::SUCCESS) {
-        per = -(static_cast<int>(res));
-        break;
-      }
-      switch (status_hidl) {
-      case BatteryStatus::CHARGING:
-      case BatteryStatus::FULL:
-        current = ChargeStatus::ON;
-        break;
-      case BatteryStatus::DISCHARGING:
-      case BatteryStatus::NOT_CHARGING:
-        current = ChargeStatus::OFF;
-        break;
-      default:
-        break;
-      };
-      break;
-    }
-    default:
-      __builtin_unreachable();
-    }
-    if (per < 0) {
-      SetProperty(kSmartChargeEnabledProp, kDisabledCfgStr);
-      ALOGE("%s: exit loop: retval: %d", __func__, per);
-      break;
-    }
-    if (per > upper)
-      policy = ChargeStatus::OFF;
-    else if (withrestart && per < lower)
-      policy = ChargeStatus::ON;
-    else if (!withrestart && per < upper)
-      policy = ChargeStatus::ON;
-    else
-      skip = true;
-
-    if (current != policy && !skip) {
-      ALOGD("%s: Updating current, current %d, policy %d", __func__, current,
-            policy);
-      switch (policy) {
-      case ChargeStatus::OFF:
-        setChargableFunc(false);
-        break;
-      case ChargeStatus::ON:
-        setChargableFunc(true);
-        break;
-      default:
-        break;
-      }
-      status = policy;
-    }
-    skip = false;
-    if (cv.wait_for(lock, 5s) == std::cv_status::no_timeout) {
-      // cv signaled, exit now if kRunning is false
-      if (!kRunning)
-        break;
-    }
-  }
-  ALOGD("%s: --", __func__);
-}
-
-void SmartCharge::createLoopThread(bool restart) {
-  ScopedLock _(thread_lock);
-  ALOGD("%s: create thread", __func__);
-  kLoopThread =
-      std::make_shared<std::thread>(&SmartCharge::startLoop, this, restart);
-  kRunning = true;
-}
-
-ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper_, int32_t lower_) {
-  ALOGD("%s: upper: %d, lower: %d, kRun: %d", __func__, upper_, lower_,
-        kRunning.load());
-  if (!verifyConfig(lower_, upper_))
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  if (kRunning)
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-  if (lower_ < 0)
-    lower_ = kInvalidCfg;
-  auto pair = ConfigPair<int>{lower_, upper_};
-  SetProperty(kSmartChargeConfigProp, pair.toString());
+SmartCharge::~SmartCharge() {
+  std::thread worker;
   {
-    std::unique_lock<std::mutex> _(config_lock);
-    lower = lower_;
-    upper = upper_;
+    std::unique_lock lock(stateLock_);
+    enabled_ = false;
+    worker = stopWorkerLocked(&lock);
   }
-  ALOGD("%s: Exit", __func__);
+  if (worker.joinable()) worker.join();
+  if (backendSupported_) (void)applyChargingPermission(true);
+}
+
+void SmartCharge::loadConfiguration() {
+  ConfigParser parser(kConfigPath);
+  setChargingAllowed_ = parser.findEntry({
+      ::android::base::GetProperty("ro.product.device", ""),
+      ::android::base::GetProperty("ro.product.manufacturer", "")});
+  backendSupported_ = static_cast<bool>(setChargingAllowed_);
+  if (!backendSupported_) LOG(ERROR) << "SmartCharge is unsupported on this device";
+}
+
+void SmartCharge::connectHealthService() {
+  std::lock_guard lock(healthLock_);
+  healthAidl_.reset();
+  healthHidl_.clear();
+  hidlDeathRecipient_.clear();
+  aidlDeathRecipient_ = ndk::ScopedAIBinder_DeathRecipient();
+  healthBackend_ = HealthBackend::NONE;
+
+  healthAidl_ = getServiceDefault<IHealthAIDL>();
+  if (healthAidl_) {
+    healthBackend_ = HealthBackend::AIDL;
+    aidlDeathRecipient_ = ndk::ScopedAIBinder_DeathRecipient(
+        AIBinder_DeathRecipient_new(OnAidlHealthDied));
+    (void)AIBinder_linkToDeath(healthAidl_->asBinder().get(),
+                              aidlDeathRecipient_.get(), this);
+    return;
+  }
+
+  healthHidl_ = ::android::hardware::health::V2_0::get_health_service();
+  if (healthHidl_) {
+    healthBackend_ = HealthBackend::HIDL;
+    hidlDeathRecipient_ = new hidl_health_death_recipient(healthHidl_, this);
+    (void)healthHidl_->linkToDeath(hidlDeathRecipient_, 0);
+  }
+}
+
+void SmartCharge::reloadHealthService() {
+  connectHealthService();
+  wakeWorker();
+}
+
+std::optional<int> SmartCharge::readBatteryPercent(std::string *error) {
+  std::lock_guard lock(healthLock_);
+  int percent = -1;
+  if (healthBackend_ == HealthBackend::AIDL && healthAidl_) {
+    auto status = healthAidl_->getCapacity(&percent);
+    if (!status.isOk()) {
+      if (error) *error = status.getDescription();
+      return std::nullopt;
+    }
+  } else if (healthBackend_ == HealthBackend::HIDL && healthHidl_) {
+    using ::android::hardware::health::V2_0::Result;
+    Result result = Result::UNKNOWN;
+    healthHidl_->getCapacity([&](Result returned, int32_t value) {
+      result = returned;
+      percent = value;
+    });
+    if (result != Result::SUCCESS) {
+      if (error) *error = "HIDL Health getCapacity failed";
+      return std::nullopt;
+    }
+  } else {
+    if (error) *error = "No Health HAL is connected";
+    return std::nullopt;
+  }
+  if (percent < 0 || percent > 100) {
+    if (error) *error = "Health HAL returned an invalid percentage";
+    return std::nullopt;
+  }
+  return percent;
+}
+
+bool SmartCharge::applyChargingPermission(bool allow) {
+  return backendSupported_ && setChargingAllowed_ && setChargingAllowed_(allow);
+}
+
+void SmartCharge::workerLoop() {
+  std::unique_lock lock(stateLock_);
+  while (!stopRequested_ && enabled_) {
+    const auto generation = generation_;
+    const int upper = upper_;
+    const int lower = lower_;
+    const bool restart = restartEnabled_;
+    const auto lastApplied = lastAppliedPermission_;
+    lock.unlock();
+
+    std::string error;
+    const auto percent = readBatteryPercent(&error);
+    if (!percent) {
+      const bool restored = lastApplied == true || applyChargingPermission(true);
+      lock.lock();
+      lastBatteryPercent_ = -1;
+      lastAppliedPermission_ = restored ? std::optional<bool>{true} : std::nullopt;
+      lastError_ = error + (restored ? "" : "; failed to restore charging");
+      lock.unlock();
+      connectHealthService();
+      lock.lock();
+    } else {
+      const auto decision = EvaluateChargePolicy(*percent, upper, lower, restart);
+      std::optional<bool> desired;
+      if (decision == ChargeDecision::ALLOW_CHARGING ||
+          (decision == ChargeDecision::KEEP_CURRENT && !lastApplied)) {
+        desired = true;
+      } else if (decision == ChargeDecision::DISALLOW_CHARGING) {
+        desired = false;
+      }
+
+      lock.lock();
+      if (stopRequested_ || !enabled_ || generation_ != generation) continue;
+      lock.unlock();
+      bool applied = true;
+      bool failOpen = false;
+      if (desired && desired != lastApplied) {
+        applied = applyChargingPermission(*desired);
+        if (!applied && !*desired) failOpen = applyChargingPermission(true);
+      }
+      lock.lock();
+      lastBatteryPercent_ = *percent;
+      if (!applied) {
+        lastAppliedPermission_ = failOpen ? std::optional<bool>{true} : std::nullopt;
+        lastError_ = failOpen ? "Policy apply failed; charging restored"
+                              : "Policy and fail-open actions failed";
+      } else {
+        if (desired) lastAppliedPermission_ = desired;
+        lastError_.clear();
+      }
+    }
+
+    stateCv_.wait_for(lock, 5s, [&] {
+      return stopRequested_ || !enabled_ || generation_ != generation;
+    });
+  }
+}
+
+void SmartCharge::startWorkerLocked() {
+  if (worker_.joinable()) return;
+  stopRequested_ = false;
+  worker_ = std::thread(&SmartCharge::workerLoop, this);
+}
+
+std::thread SmartCharge::stopWorkerLocked(std::unique_lock<std::mutex> *lock) {
+  stopRequested_ = true;
+  ++generation_;
+  stateCv_.notify_all();
+  std::thread worker = std::move(worker_);
+  if (lock && lock->owns_lock()) lock->unlock();
+  return worker;
+}
+
+void SmartCharge::wakeWorker() {
+  std::lock_guard lock(stateLock_);
+  ++generation_;
+  stateCv_.notify_all();
+}
+
+void SmartCharge::loadPersistedState() {
+  int lower = kInvalidLowerLimit, upper = kInvalidLowerLimit;
+  const auto config = ::android::base::GetProperty(kConfigProp, "");
+  if (ParseIntegerPair(config, &lower, &upper) &&
+      IsValidChargeConfig(upper, lower)) {
+    upper_ = upper;
+    lower_ = lower;
+  }
+
+  int enabled = 0, restart = 0;
+  const auto state = ::android::base::GetProperty(kEnabledProp, kDisabled);
+  if (!ParseIntegerPair(state, &enabled, &restart) ||
+      (enabled != 0 && enabled != 1) || (restart != 0 && restart != 1)) {
+    (void)::android::base::SetProperty(kEnabledProp, kDisabled);
+    return;
+  }
+  if (!enabled) return;
+  if (!backendSupported_ || !IsValidChargeConfig(upper_, lower_) ||
+      (restart && lower_ == kInvalidLowerLimit)) {
+    (void)::android::base::SetProperty(kEnabledProp, kDisabled);
+    if (backendSupported_) (void)applyChargingPermission(true);
+    return;
+  }
+  std::lock_guard lock(stateLock_);
+  enabled_ = true;
+  restartEnabled_ = restart != 0;
+  ++generation_;
+  startWorkerLocked();
+}
+
+ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper, int32_t lower) {
+  std::lock_guard apiGuard(apiLock_);
+  if (lower < 0) lower = kInvalidLowerLimit;
+  if (!IsValidChargeConfig(upper, lower)) {
+    return ndk::ScopedAStatus::fromExceptionCodeWithMessage(
+        EX_ILLEGAL_ARGUMENT,
+        "upper must be 50-95 and lower must be -1 or 50..upper-1");
+  }
+  errno = 0;
+  if (!::android::base::SetProperty(kConfigProp, Pair(lower, upper)))
+    return PropertyError("Failed to persist SmartCharge limits");
+  {
+    std::lock_guard lock(stateLock_);
+    upper_ = upper;
+    lower_ = lower;
+    ++generation_;
+  }
+  stateCv_.notify_all();
   return ndk::ScopedAStatus::ok();
 }
 
 ndk::ScopedAStatus SmartCharge::activate(bool enable, bool restart) {
-  auto pair = ConfigPair<bool>{enable, restart};
-  {
-    std::unique_lock<std::mutex> _(config_lock);
-    ALOGD("%s: upper: %d, lower: %d, enable: %d, restart: %d, kRun: %d",
-          __func__, upper, lower, enable, restart, kRunning.load());
-    if (!verifyConfig(lower, upper))
-      return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
-    if (lower == kInvalidCfg && restart)
-      return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+  std::lock_guard apiGuard(apiLock_);
+  if (enable && !backendSupported_) {
+    return ndk::ScopedAStatus::fromExceptionCodeWithMessage(
+        EX_UNSUPPORTED_OPERATION, "SmartCharge is unsupported on this device");
   }
-  if (kRunning == enable)
-    return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
-  SetProperty(kSmartChargeEnabledProp, pair.toString());
   if (enable) {
-    if (kRunning) {
-      ALOGW("Thread is running?");
-    } else {
-      createLoopThread(restart);
+    {
+      std::lock_guard lock(stateLock_);
+      if (!IsValidChargeConfig(upper_, lower_))
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+      if (restart && lower_ == kInvalidLowerLimit)
+        return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
     }
-  } else {
-    setChargableFunc(true);
-    if (kRunning) {
-      ScopedLock _(thread_lock);
-      kRunning = false;
-      if (kLoopThread->joinable()) {
-        cv.notify_one();
-        kLoopThread->join();
-      }
-      kLoopThread.reset();
-    } else {
-      ALOGW("No threads to stop?");
+    errno = 0;
+    if (!::android::base::SetProperty(kEnabledProp, Pair(1, restart ? 1 : 0)))
+      return PropertyError("Failed to persist SmartCharge enabled state");
+    {
+      std::lock_guard lock(stateLock_);
+      enabled_ = true;
+      restartEnabled_ = restart;
+      ++generation_;
+      startWorkerLocked();
     }
+    stateCv_.notify_all();
+    return ndk::ScopedAStatus::ok();
   }
-  ALOGD("%s: Exit", __func__);
+
+  errno = 0;
+  const bool propertyUpdated = ::android::base::SetProperty(kEnabledProp, kDisabled);
+  std::thread worker;
+  {
+    std::unique_lock lock(stateLock_);
+    enabled_ = false;
+    restartEnabled_ = false;
+    worker = stopWorkerLocked(&lock);
+  }
+  if (worker.joinable()) worker.join();
+  const bool restored = !backendSupported_ || applyChargingPermission(true);
+  {
+    std::lock_guard lock(stateLock_);
+    lastAppliedPermission_ = restored ? std::optional<bool>{true} : std::nullopt;
+    lastError_ = restored ? "" : "Failed to restore charging permission";
+  }
+  if (!propertyUpdated) return PropertyError("Failed to persist disabled state");
+  if (!restored)
+    return ndk::ScopedAStatus::fromServiceSpecificErrorWithMessage(
+        EIO, "Failed to restore charging permission");
   return ndk::ScopedAStatus::ok();
 }
 
-binder_status_t SmartCharge::dump(int fd, const char ** /* args */,
-                                  uint32_t /* numArgs */) {
-  auto tryLockFn = [](std::mutex &m) {
-    const std::unique_lock<std::mutex> lk{m, std::try_to_lock};
-    return !lk.owns_lock();
-  };
-
-  dprintf(fd, "Loop thread running: %d\n", kRunning.load());
-  if (kRunning) {
-    dprintf(fd, "Loop thread charge control state: ");
-    switch (status) {
-    case ChargeStatus::ON:
-      dprintf(fd, "ON");
-      break;
-    case ChargeStatus::OFF:
-      dprintf(fd, "OFF");
-      break;
-    }
-    dprintf(fd, "\n");
-  }
-  dprintf(fd, "Configuration (upper/lower): %d %d\n", upper, lower);
-  dprintf(fd, "Mutex locked (config/thread/cv) %d %d %d\n",
-          tryLockFn(config_lock), tryLockFn(thread_lock), tryLockFn(kCVLock));
-  dprintf(fd, "Connected Health HAL: ");
-  switch (healthState) {
-  case USE_HEALTH_AIDL:
-    dprintf(fd, "AIDL Health HAL V1");
-    break;
-  case USE_HEALTH_HIDL:
-    dprintf(fd, "HIDL Health HAL V2.0");
-    break;
-  default:
-    break;
-  };
-  dprintf(fd, "\n");
+binder_status_t SmartCharge::dump(int fd, const char **, uint32_t) {
+  std::scoped_lock lock(stateLock_, healthLock_);
+  dprintf(fd, "Supported: %s\n", backendSupported_ ? "yes" : "no");
+  dprintf(fd, "Enabled: %s\n", enabled_ ? "yes" : "no");
+  dprintf(fd, "Mode: %s\n", restartEnabled_ ? "hysteresis" : "stop-only");
+  dprintf(fd, "Configuration (upper/lower): %d %d\n", upper_, lower_);
+  dprintf(fd, "Last battery percent: %d\n", lastBatteryPercent_);
+  dprintf(fd, "Charging permission: %s\n",
+          !lastAppliedPermission_ ? "unknown"
+                                 : (*lastAppliedPermission_ ? "allowed" : "blocked"));
+  dprintf(fd, "Health backend: %s\n",
+          healthBackend_ == HealthBackend::AIDL
+              ? "AIDL"
+              : (healthBackend_ == HealthBackend::HIDL ? "HIDL" : "none"));
+  dprintf(fd, "Last error: %s\n", lastError_.empty() ? "none" : lastError_.c_str());
   return STATUS_OK;
 }
 
 using ::android::hardware::interfacesEqual;
-
 void hidl_health_death_recipient::serviceDied(
-    uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase> &who) {
-  if (mHealth != nullptr && interfacesEqual(mHealth, who.promote())) {
-    onServiceDied(reinterpret_cast<void *>(cookie));
-  }
+    uint64_t, const wp<::android::hidl::base::V1_0::IBase> &who) {
+  if (owner_ && health_ && interfacesEqual(health_, who.promote()))
+    owner_->reloadHealthService();
 }
 
-} // namespace battery
-} // namespace framework
-} // namespace samsung_ext
-} // namespace vendor
-} // namespace aidl
+}  // namespace aidl::vendor::samsung_ext::framework::battery
