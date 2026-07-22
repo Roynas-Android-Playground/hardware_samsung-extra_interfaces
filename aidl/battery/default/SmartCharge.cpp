@@ -23,8 +23,7 @@ constexpr char kConfigPath[] = "/system_ext/etc/smartcharge_nodes.json";
 constexpr char kDisabled[] = "0,0";
 std::string Pair(int a, int b) { return std::to_string(a) + "," + std::to_string(b); }
 ndk::ScopedAStatus PropertyError(const char *message) {
-  return ndk::ScopedAStatus::fromServiceSpecificErrorWithMessage(
-      errno == 0 ? EIO : errno, message);
+  return ndk::ScopedAStatus::fromServiceSpecificErrorWithMessage(errno == 0 ? EIO : errno, message);
 }
 void OnAidlHealthDied(void *cookie) {
   if (auto *service = static_cast<SmartCharge *>(cookie)) service->reloadHealthService();
@@ -50,9 +49,9 @@ SmartCharge::~SmartCharge() {
 
 void SmartCharge::loadConfiguration() {
   ConfigParser parser(kConfigPath);
-  setChargingAllowed_ = parser.findEntry({
-      ::android::base::GetProperty("ro.product.device", ""),
-      ::android::base::GetProperty("ro.product.manufacturer", "")});
+  setChargingAllowed_ =
+      parser.findEntry({::android::base::GetProperty("ro.product.device", ""),
+                        ::android::base::GetProperty("ro.product.manufacturer", "")});
   backendSupported_ = static_cast<bool>(setChargingAllowed_);
   if (!backendSupported_) LOG(ERROR) << "SmartCharge is unsupported on this device";
 }
@@ -68,10 +67,9 @@ void SmartCharge::connectHealthService() {
   healthAidl_ = getServiceDefault<IHealthAIDL>();
   if (healthAidl_) {
     healthBackend_ = HealthBackend::AIDL;
-    aidlDeathRecipient_ = ndk::ScopedAIBinder_DeathRecipient(
-        AIBinder_DeathRecipient_new(OnAidlHealthDied));
-    (void)AIBinder_linkToDeath(healthAidl_->asBinder().get(),
-                              aidlDeathRecipient_.get(), this);
+    aidlDeathRecipient_ =
+        ndk::ScopedAIBinder_DeathRecipient(AIBinder_DeathRecipient_new(OnAidlHealthDied));
+    (void)AIBinder_linkToDeath(healthAidl_->asBinder().get(), aidlDeathRecipient_.get(), this);
     return;
   }
 
@@ -175,9 +173,8 @@ void SmartCharge::workerLoop() {
       }
     }
 
-    stateCv_.wait_for(lock, 5s, [&] {
-      return stopRequested_ || !enabled_ || generation_ != generation;
-    });
+    stateCv_.wait_for(lock, 5s,
+                      [&] { return stopRequested_ || !enabled_ || generation_ != generation; });
   }
 }
 
@@ -205,16 +202,15 @@ void SmartCharge::wakeWorker() {
 void SmartCharge::loadPersistedState() {
   int lower = kInvalidLowerLimit, upper = kInvalidLowerLimit;
   const auto config = ::android::base::GetProperty(kConfigProp, "");
-  if (ParseIntegerPair(config, &lower, &upper) &&
-      IsValidChargeConfig(upper, lower)) {
+  if (ParseIntegerPair(config, &lower, &upper) && IsValidChargeConfig(upper, lower)) {
     upper_ = upper;
     lower_ = lower;
   }
 
   int enabled = 0, restart = 0;
   const auto state = ::android::base::GetProperty(kEnabledProp, kDisabled);
-  if (!ParseIntegerPair(state, &enabled, &restart) ||
-      (enabled != 0 && enabled != 1) || (restart != 0 && restart != 1)) {
+  if (!ParseIntegerPair(state, &enabled, &restart) || (enabled != 0 && enabled != 1) ||
+      (restart != 0 && restart != 1)) {
     (void)::android::base::SetProperty(kEnabledProp, kDisabled);
     return;
   }
@@ -235,10 +231,16 @@ void SmartCharge::loadPersistedState() {
 ndk::ScopedAStatus SmartCharge::setChargeLimit(int32_t upper, int32_t lower) {
   std::lock_guard apiGuard(apiLock_);
   if (lower < 0) lower = kInvalidLowerLimit;
-  if (!IsValidChargeConfig(upper, lower)) {
+  bool restartEnabled = false;
+  {
+    std::lock_guard lock(stateLock_);
+    restartEnabled = restartEnabled_;
+  }
+  if (!IsValidChargeConfigForMode(upper, lower, restartEnabled)) {
     return ndk::ScopedAStatus::fromExceptionCodeWithMessage(
         EX_ILLEGAL_ARGUMENT,
-        "upper must be 50-95 and lower must be -1 or 50..upper-1");
+        "upper must be 50-95; lower must be 50..upper-1 while restart is "
+        "enabled, otherwise -1 is also allowed");
   }
   errno = 0;
   if (!::android::base::SetProperty(kConfigProp, Pair(lower, upper)))
@@ -312,8 +314,7 @@ binder_status_t SmartCharge::dump(int fd, const char **, uint32_t) {
   dprintf(fd, "Configuration (upper/lower): %d %d\n", upper_, lower_);
   dprintf(fd, "Last battery percent: %d\n", lastBatteryPercent_);
   dprintf(fd, "Charging permission: %s\n",
-          !lastAppliedPermission_ ? "unknown"
-                                 : (*lastAppliedPermission_ ? "allowed" : "blocked"));
+          !lastAppliedPermission_ ? "unknown" : (*lastAppliedPermission_ ? "allowed" : "blocked"));
   dprintf(fd, "Health backend: %s\n",
           healthBackend_ == HealthBackend::AIDL
               ? "AIDL"
@@ -323,10 +324,9 @@ binder_status_t SmartCharge::dump(int fd, const char **, uint32_t) {
 }
 
 using ::android::hardware::interfacesEqual;
-void hidl_health_death_recipient::serviceDied(
-    uint64_t, const wp<::android::hidl::base::V1_0::IBase> &who) {
-  if (owner_ && health_ && interfacesEqual(health_, who.promote()))
-    owner_->reloadHealthService();
+void hidl_health_death_recipient::serviceDied(uint64_t,
+                                              const wp<::android::hidl::base::V1_0::IBase> &who) {
+  if (owner_ && health_ && interfacesEqual(health_, who.promote())) owner_->reloadHealthService();
 }
 
 }  // namespace aidl::vendor::samsung_ext::framework::battery

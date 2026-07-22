@@ -19,6 +19,12 @@ void Expect(bool condition, const char *message) {
 }
 
 void TestAvcParsing() {
+  Expect(ShouldCollectAvcFromSource("dmesg", true), "kernel audit source should be trusted");
+  Expect(!ShouldCollectAvcFromSource("logcat", true),
+         "application-controlled logcat must not generate suggestions");
+  Expect(!ShouldCollectAvcFromSource("dmesg", false),
+         "disabled AVC collection must remain disabled");
+
   AvcContext context(
       R"(type=1400 audit(0.0:1): avc: denied { read open } for name="a file with spaces" scontext=u:r:audioserver:s0 tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0)");
   Expect(context.valid, "valid AVC line should parse");
@@ -31,21 +37,43 @@ void TestAvcParsing() {
   AvcContext malformed("avc: denied { read for scontext=u:r:init:s0");
   Expect(!malformed.valid, "truncated AVC should be rejected");
 
+  AvcContext malformedSource(
+      "avc: denied { read } for scontext=audioserver "
+      "tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0");
+  Expect(!malformedSource.valid, "malformed source context should be rejected");
+
+  AvcContext prefixedContext(
+      "avc: denied { read } for scontext=xu:r:audioserver:s0 "
+      "tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0");
+  Expect(!prefixedContext.valid, "source context must match the complete token");
+
+  AvcContext malformedMls(
+      "avc: denied { read } for scontext=u:r:audioserver:s0:garbage "
+      "tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0");
+  Expect(!malformedMls.valid, "malformed MLS suffix must be rejected");
+
+  AvcContext malformedPermission(
+      "avc: denied { read; } for scontext=u:r:audioserver:s0 "
+      "tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0");
+  Expect(!malformedPermission.valid, "malformed permission token should be rejected");
+
+  AvcContext malformedClass(
+      "avc: denied { read } for scontext=u:r:audioserver:s0 "
+      "tcontext=u:object_r:vendor_file:s0 tclass=file; permissive=0");
+  Expect(!malformedClass.valid, "malformed class token should be rejected");
+
   AvcContext untrusted(
       "avc: denied { search } for scontext=u:r:untrusted_app:s0 "
       "tcontext=u:object_r:sysfs:s0 tclass=dir permissive=0");
-  Expect(untrusted.valid && untrusted.isUntrustedApp(),
-         "untrusted_app should be recognized");
+  Expect(untrusted.valid && untrusted.isUntrustedApp(), "untrusted_app should be recognized");
 
   AvcContext second(
       "avc: denied { getattr } for scontext=u:r:audioserver:s0 "
       "tcontext=u:object_r:vendor_file:s0 tclass=file permissive=0");
   Expect(context.mergeFrom(second), "matching AVC contexts should merge");
   Expect(second.consumed, "merged AVC context should be consumed");
-  Expect(context.operations.count("getattr") == 1,
-         "merged operation missing");
-  Expect(context.toAllowRule() ==
-             "allow audioserver vendor_file:file { getattr open read };",
+  Expect(context.operations.count("getattr") == 1, "merged operation missing");
+  Expect(context.toAllowRule() == "allow audioserver vendor_file:file { getattr open read };",
          "allow rule formatting is unexpected");
 }
 
@@ -53,17 +81,15 @@ void TestKernelConfigParsing() {
   std::string name;
   ConfigValue value = ConfigValue::UNKNOWN;
 
-  Expect(ParseKernelConfigLine("CONFIG_AUDIT=y", &name, &value) &&
-             name == "CONFIG_AUDIT" && value == ConfigValue::BUILT_IN,
+  Expect(ParseKernelConfigLine("CONFIG_AUDIT=y", &name, &value) && name == "CONFIG_AUDIT" &&
+             value == ConfigValue::BUILT_IN,
          "built-in config parse failed");
-  Expect(ParseKernelConfigLine("CONFIG_TEST=m", &name, &value) &&
-             value == ConfigValue::MODULE,
+  Expect(ParseKernelConfigLine("CONFIG_TEST=m", &name, &value) && value == ConfigValue::MODULE,
          "module config parse failed");
   Expect(ParseKernelConfigLine("CONFIG_NAME=\"hello world\"", &name, &value) &&
              value == ConfigValue::STRING,
          "string config parse failed");
-  Expect(ParseKernelConfigLine("CONFIG_NUMBER=-42", &name, &value) &&
-             value == ConfigValue::INT,
+  Expect(ParseKernelConfigLine("CONFIG_NUMBER=-42", &name, &value) && value == ConfigValue::INT,
          "integer config parse failed");
   Expect(ParseKernelConfigLine("# CONFIG_UNUSED is not set", &name, &value) &&
              name == "CONFIG_UNUSED" && value == ConfigValue::UNSET,
@@ -74,13 +100,10 @@ void TestKernelConfigParsing() {
 
 void TestCapturePaths() {
   Expect(IsSafeCaptureName("boot"), "boot should be a safe capture name");
-  Expect(IsSafeCaptureName("system-1"),
-         "system-1 should be a safe capture name");
+  Expect(IsSafeCaptureName("system-1"), "system-1 should be a safe capture name");
   Expect(!IsSafeCaptureName("../boot"), "parent traversal must be rejected");
-  Expect(!IsSafeCaptureName("/data/debug"),
-         "absolute capture name must be rejected");
-  Expect(!IsSafeCaptureName(".hidden"),
-         "hidden capture names should be rejected");
+  Expect(!IsSafeCaptureName("/data/debug"), "absolute capture name must be rejected");
+  Expect(!IsSafeCaptureName(".hidden"), "hidden capture names should be rejected");
 
   const fs::path root = fs::temp_directory_path() / "bootlogger-tests";
   std::error_code ec;

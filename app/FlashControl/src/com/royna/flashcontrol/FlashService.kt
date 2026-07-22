@@ -15,8 +15,8 @@ class FlashService : Service() {
   private val service: IFlashlight? =
     IFlashlight.Stub.asInterface(
       ServiceManager.waitForDeclaredService(
-        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default",
-      ),
+        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"
+      )
     )
   private val mainHandler = Handler(Looper.getMainLooper())
   private var observerRegistered = false
@@ -32,6 +32,7 @@ class FlashService : Service() {
   override fun onBind(intent: Intent): IBinder? = null
 
   override fun onDestroy() {
+    mainHandler.removeCallbacksAndMessages(null)
     if (observerRegistered) {
       contentResolver.unregisterContentObserver(flashObserver)
       observerRegistered = false
@@ -48,12 +49,7 @@ class FlashService : Service() {
     object : ContentObserver(mainHandler) {
       override fun onChange(selfChange: Boolean) {
         super.onChange(selfChange)
-        val isOn =
-          Settings.Secure.getInt(
-            contentResolver,
-            Settings.Secure.FLASHLIGHT_ENABLED,
-            0,
-          )
+        val isOn = Settings.Secure.getInt(contentResolver, Settings.Secure.FLASHLIGHT_ENABLED, 0)
         if (isOn != 1) return
 
         val brightness = rememberedBrightness()

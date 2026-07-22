@@ -1,2 +1,6 @@
 add_library(libAndroidStub INTERFACE)
 target_include_directories(libAndroidStub INTERFACE include)
+
+add_executable(host_stub_tests HostStubTests.cpp)
+target_link_libraries(host_stub_tests PRIVATE libAndroidStub)
+add_test(NAME host_stub_headers COMMAND host_stub_tests)

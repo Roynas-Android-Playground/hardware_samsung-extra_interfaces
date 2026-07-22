@@ -19,16 +19,20 @@ bool ParseInteger(std::string_view value, int *result) {
 }  // namespace
 
 bool IsValidChargeConfig(int upperPercent, int lowerPercent) {
-  if (upperPercent < kMinimumChargeLimit ||
-      upperPercent > kMaximumChargeLimit) {
+  if (upperPercent < kMinimumChargeLimit || upperPercent > kMaximumChargeLimit) {
     return false;
   }
   return lowerPercent == kInvalidLowerLimit ||
          (lowerPercent >= kMinimumChargeLimit && lowerPercent < upperPercent);
 }
 
-ChargeDecision EvaluateChargePolicy(int batteryPercent, int upperPercent,
-                                    int lowerPercent, bool restartEnabled) {
+bool IsValidChargeConfigForMode(int upperPercent, int lowerPercent, bool restartEnabled) {
+  return IsValidChargeConfig(upperPercent, lowerPercent) &&
+         (!restartEnabled || lowerPercent != kInvalidLowerLimit);
+}
+
+ChargeDecision EvaluateChargePolicy(int batteryPercent, int upperPercent, int lowerPercent,
+                                    bool restartEnabled) {
   if (!IsValidChargeConfig(upperPercent, lowerPercent) || batteryPercent < 0 ||
       batteryPercent > 100) {
     return ChargeDecision::ALLOW_CHARGING;
@@ -50,8 +54,7 @@ bool ParseIntegerPair(std::string_view value, int *first, int *second) {
     return false;
   }
   const auto comma = value.find(',');
-  if (comma == std::string_view::npos || comma == 0 ||
-      comma + 1 >= value.size() ||
+  if (comma == std::string_view::npos || comma == 0 || comma + 1 >= value.size() ||
       value.find(',', comma + 1) != std::string_view::npos) {
     return false;
   }

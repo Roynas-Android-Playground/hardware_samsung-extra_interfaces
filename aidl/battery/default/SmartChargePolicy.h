@@ -16,8 +16,9 @@ enum class ChargeDecision {
 };
 
 bool IsValidChargeConfig(int upperPercent, int lowerPercent);
-ChargeDecision EvaluateChargePolicy(int batteryPercent, int upperPercent,
-                                    int lowerPercent, bool restartEnabled);
+bool IsValidChargeConfigForMode(int upperPercent, int lowerPercent, bool restartEnabled);
+ChargeDecision EvaluateChargePolicy(int batteryPercent, int upperPercent, int lowerPercent,
+                                    bool restartEnabled);
 bool ParseIntegerPair(std::string_view value, int *first, int *second);
 
 }  // namespace aidl::vendor::samsung_ext::framework::battery

@@ -11,7 +11,6 @@ import android.os.Looper
 import android.os.ServiceManager
 import android.provider.Settings
 import android.util.Log
-import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -19,13 +18,13 @@ import com.android.settingslib.widget.MainSwitchPreference
 import com.android.settingslib.widget.SelectorWithWidgetPreference
 import vendor.samsung_ext.hardware.camera.flashlight.IFlashlight
 
-class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChangeListener {
+class FlashFragment : PreferenceFragmentCompat() {
   private lateinit var switchBar: MainSwitchPreference
   private val service: IFlashlight? =
     IFlashlight.Stub.asInterface(
       ServiceManager.waitForDeclaredService(
-        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default",
-      ),
+        "vendor.samsung_ext.hardware.camera.flashlight.IFlashlight/default"
+      )
     )
   private lateinit var currentIntensity: Preference
   private lateinit var currentOn: Preference
@@ -34,7 +33,7 @@ class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChange
     addPreferencesFromResource(R.xml.flash_settings)
 
     switchBar = findPreference<MainSwitchPreference>(PREF_FLASH_ENABLE)!!
-    switchBar.addOnSwitchChangeListener(this)
+    switchBar.setOnPreferenceChangeListener { _, value -> setFlashEnabled(value as Boolean) }
 
     val state = runCatching { service?.state }.getOrNull()
     val frameworkFlashEnabled =
@@ -70,10 +69,7 @@ class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChange
 
   private fun changeOnOffView(enabled: Boolean) {
     currentOn.title =
-      getString(
-        R.string.flash_current_on,
-        getString(if (enabled) R.string.on else R.string.off),
-      )
+      getString(R.string.flash_current_on, getString(if (enabled) R.string.on else R.string.off))
   }
 
   private fun updateStateView(enabled: Boolean, brightness: Int) {
@@ -94,9 +90,10 @@ class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChange
 
   override fun onResume() {
     super.onResume()
-    val state = runCatching { service?.state }
-      .onFailure { Log.e(TAG, "Failed to query flashlight state", it) }
-      .getOrNull()
+    val state =
+      runCatching { service?.state }
+        .onFailure { Log.e(TAG, "Failed to query flashlight state", it) }
+        .getOrNull()
     val enabled = state?.enabled ?: false
     val brightness = state?.brightnessLevel ?: 1
     updateStateView(enabled, brightness)
@@ -123,23 +120,27 @@ class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChange
       }
     }
 
-  override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
+  private fun setFlashEnabled(isChecked: Boolean): Boolean {
     val activeService = service
     if (activeService == null) {
       Log.e(TAG, "Flashlight service is unavailable")
-      buttonView.isChecked = false
-      return
+      return false
     }
 
-    runCatching {
-      activeService.enableFlash(isChecked)
-      activeService.state
-    }.onSuccess { state ->
-      updateStateView(state.enabled, state.brightnessLevel)
-    }.onFailure {
-      Log.w(TAG, "enableFlash($isChecked) failed", it)
-      buttonView.isChecked = !isChecked
-    }
+    return runCatching {
+        activeService.enableFlash(isChecked)
+        activeService.state
+      }
+      .fold(
+        onSuccess = { state ->
+          updateStateView(state.enabled, state.brightnessLevel)
+          true
+        },
+        onFailure = {
+          Log.w(TAG, "enableFlash($isChecked) failed", it)
+          false
+        },
+      )
   }
 
   private fun changeRadioButtons(enable: Boolean) {
@@ -156,13 +157,11 @@ class FlashFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChange
     }
 
     runCatching {
-      activeService.setBrightness(intensity)
-      activeService.state
-    }.onSuccess { state ->
-      updateStateView(state.enabled, state.brightnessLevel)
-    }.onFailure {
-      Log.e(TAG, "Failed to set flashlight intensity $intensity", it)
-    }
+        activeService.setBrightness(intensity)
+        activeService.state
+      }
+      .onSuccess { state -> updateStateView(state.enabled, state.brightnessLevel) }
+      .onFailure { Log.e(TAG, "Failed to set flashlight intensity $intensity", it) }
   }
 
   override fun onPause() {

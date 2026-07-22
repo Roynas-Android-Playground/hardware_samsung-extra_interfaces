@@ -11,7 +11,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.ServiceManager
 import android.util.Log
-import android.widget.CompoundButton
 import android.widget.Toast
 import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
@@ -21,17 +20,18 @@ import androidx.preference.SwitchPreference
 import com.android.settingslib.widget.MainSwitchPreference
 import vendor.samsung_ext.framework.battery.ISmartCharge
 
-class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnCheckedChangeListener {
+class SmartChargeFragment : PreferenceFragmentCompat() {
   private lateinit var mainSwitch: MainSwitchPreference
   private lateinit var stopBar: SeekBarPreference
   private lateinit var restartBar: SeekBarPreference
   private lateinit var restartSwitch: SwitchPreference
   private val mainHandler = Handler(Looper.getMainLooper())
+
   private val service: ISmartCharge? =
     ISmartCharge.Stub.asInterface(
       ServiceManager.waitForDeclaredService(
-        "vendor.samsung_ext.framework.battery.ISmartCharge/default",
-      ),
+        "vendor.samsung_ext.framework.battery.ISmartCharge/default"
+      )
     )
   private lateinit var preferences: SharedPreferences
 
@@ -51,7 +51,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
     restartBar.value = preferences.getInt(PREF_RESTART, DEFAULT_RESTART)
     restartBar.isEnabled = restartSwitch.isChecked
 
-    mainSwitch.addOnSwitchChangeListener(this)
+    mainSwitch.setOnPreferenceChangeListener { _, value -> setSmartChargeEnabled(value as Boolean) }
     restartSwitch.setOnPreferenceChangeListener { _, value ->
       val enabled = value as Boolean
       val previousRestart = restartBar.value
@@ -60,8 +60,7 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
         restartBar.value = (stopBar.value - MINIMUM_LIMIT) / 2 + MINIMUM_LIMIT
       }
       restartBar.isEnabled = enabled
-      val success =
-        if (mainSwitch.isChecked) applyRunningConfiguration(enabled) else true
+      val success = if (mainSwitch.isChecked) applyRunningConfiguration(enabled) else true
       if (success) {
         updateSeekbarTitles(mapOf(PREF_RESTART to restartBar.value))
       } else {
@@ -71,24 +70,25 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
       success
     }
 
-    val seekListener = Preference.OnPreferenceChangeListener { preference, value ->
-      val candidate = value as Int
-      val newStop = if (preference.key == PREF_STOP) candidate else stopBar.value
-      val newRestart = if (preference.key == PREF_RESTART) candidate else restartBar.value
-      if (restartSwitch.isChecked && newRestart >= newStop) {
-        showInvalidConfig()
-        return@OnPreferenceChangeListener false
-      }
-
-      val success =
-        if (mainSwitch.isChecked) {
-          applyRunningConfiguration(restartSwitch.isChecked, newStop, newRestart)
-        } else {
-          true
+    val seekListener =
+      Preference.OnPreferenceChangeListener { preference, value ->
+        val candidate = value as Int
+        val newStop = if (preference.key == PREF_STOP) candidate else stopBar.value
+        val newRestart = if (preference.key == PREF_RESTART) candidate else restartBar.value
+        if (restartSwitch.isChecked && newRestart >= newStop) {
+          showInvalidConfig()
+          return@OnPreferenceChangeListener false
         }
-      if (success) updateSeekbarTitles(mapOf(preference.key to candidate))
-      success
-    }
+
+        val success =
+          if (mainSwitch.isChecked) {
+            applyRunningConfiguration(restartSwitch.isChecked, newStop, newRestart)
+          } else {
+            true
+          }
+        if (success) updateSeekbarTitles(mapOf(preference.key to candidate))
+        success
+      }
     stopBar.onPreferenceChangeListener = seekListener
     restartBar.onPreferenceChangeListener = seekListener
     updateSeekbarTitles()
@@ -101,12 +101,14 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
 
   private fun updateSeekbarTitles(updates: Map<String, Int> = emptyMap()) {
     for ((key, resource) in SEEK_TITLES) {
-      val value = updates[key] ?: try {
-        preferences.requireInt(key)
-      } catch (error: NotFoundException) {
-        Log.w(TAG, error.message ?: "Missing SmartCharge preference")
-        continue
-      }
+      val value =
+        updates[key]
+          ?: try {
+            preferences.requireInt(key)
+          } catch (error: NotFoundException) {
+            Log.w(TAG, error.message ?: "Missing SmartCharge preference")
+            continue
+          }
       findPreference<SeekBarPreference>(key)!!.title = getString(resource, value)
     }
   }
@@ -117,49 +119,48 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
     restart: Int = restartBar.value,
   ): Boolean =
     runCatching {
-      val activeService = checkNotNull(service) { "SmartCharge service unavailable" }
-      activeService.setChargeLimit(stop, if (restartEnabled) restart else -1)
-      activeService.activate(true, restartEnabled)
-    }.fold(
-      onSuccess = { true },
-      onFailure = {
-        Log.e(TAG, "Failed to update running SmartCharge policy", it)
-        showInvalidConfig()
-        false
-      },
-    )
+        val activeService = checkNotNull(service) { "SmartCharge service unavailable" }
+        activeService.setChargeLimit(stop, if (restartEnabled) restart else -1)
+        activeService.activate(true, restartEnabled)
+      }
+      .fold(
+        onSuccess = { true },
+        onFailure = {
+          Log.e(TAG, "Failed to update running SmartCharge policy", it)
+          showInvalidConfig()
+          false
+        },
+      )
 
-  override fun onCheckedChanged(buttonView: CompoundButton, isChecked: Boolean) {
+  private fun setSmartChargeEnabled(isChecked: Boolean): Boolean {
     val success =
       runCatching {
-        val activeService = checkNotNull(service) { "SmartCharge service unavailable" }
-        if (isChecked) {
-          val restartEnabled = restartSwitch.isChecked
-          activeService.setChargeLimit(
-            stopBar.value,
-            if (restartEnabled) restartBar.value else -1,
-          )
-          activeService.activate(true, restartEnabled)
-        } else {
-          activeService.activate(false, false)
+          val activeService = checkNotNull(service) { "SmartCharge service unavailable" }
+          if (isChecked) {
+            val restartEnabled = restartSwitch.isChecked
+            activeService.setChargeLimit(
+              stopBar.value,
+              if (restartEnabled) restartBar.value else -1,
+            )
+            activeService.activate(true, restartEnabled)
+          } else {
+            activeService.activate(false, false)
+          }
         }
-      }.onFailure {
-        Log.e(TAG, "Failed to change SmartCharge state", it)
-      }.isSuccess
+        .onFailure { Log.e(TAG, "Failed to change SmartCharge state", it) }
+        .isSuccess
 
     if (!success) {
-      mainHandler.post {
-        mainSwitch.setChecked(!isChecked)
-        Toast.makeText(requireContext(), R.string.smart_charge_internal_error, Toast.LENGTH_SHORT).show()
-      }
-      return
+      Toast.makeText(requireContext(), R.string.smart_charge_internal_error, Toast.LENGTH_SHORT)
+        .show()
     }
-    preferences.edit().putBoolean(PREF_ENABLE, isChecked).apply()
+    return success
   }
 
   private fun showInvalidConfig() {
     mainHandler.post {
-      Toast.makeText(requireContext(), R.string.smart_charge_invalid_config, Toast.LENGTH_SHORT).show()
+      Toast.makeText(requireContext(), R.string.smart_charge_invalid_config, Toast.LENGTH_SHORT)
+        .show()
     }
   }
 
@@ -173,9 +174,6 @@ class SmartChargeFragment : PreferenceFragmentCompat(), CompoundButton.OnChecked
     private const val DEFAULT_STOP = 80
     private const val DEFAULT_RESTART = 70
     private val SEEK_TITLES =
-      mapOf(
-        PREF_RESTART to R.string.smart_charge_restart,
-        PREF_STOP to R.string.smart_charge_stop,
-      )
+      mapOf(PREF_RESTART to R.string.smart_charge_restart, PREF_STOP to R.string.smart_charge_stop)
   }
 }
