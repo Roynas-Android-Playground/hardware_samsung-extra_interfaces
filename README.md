@@ -1,23 +1,30 @@
 # ✔ Hardware Samsung Extra Interfaces
-Set of packages for common Samsung devices, and some extras
+Set of packages for common Samsung devices, and some extras.
 
 ## ➡ Subdirectories
 Sub directory  | Description
 ------------------------------:|:-----------
-`aidl/battery/default`         | AIDL Smartcharge HAL Implementation, frozen as vendor.samsung_ext.framework.battery-V1
-`aidl/battery/test_client`     | Client to the AIDL Smartcharge HAL, for testing and debugging
-`aidl/flashlight/default`      | AIDL Flashlight Brightness Controller HAL Implementation, frozen as vendor.samsung_ext.hardware.camera.flashlight-V1
-`aidl/flashlight/test_client`  | Client to the AIDL Flashlight Brightness Controller HAL, for testing and debugging
-`aidl/light_ext/default`       | AIDL Light HAL Implementation with 'Sunlight' mode vendor extension, frozen as vendor.samsung_ext.hardware.light-V1, based on android.hardware.light-service.samsung (BROKEN)
-`aidl/light_ext/test_client`   | Client to the AIDL Light HAL with vendor extension, for testing and debugging
-`app/FlashControl`             | Client to the AIDL Flashlight Brightness Controller HAL, actual user frontend app providing the UI for configuring flashlight brightness scale
-`app/SmartCharge`              | Client to the AIDL Smartcharge HAL, actual user frontend app providing the UI for configuring 'Smartcharge' settings
-`debug-tools/bootlogger`       | A boot time logger binary used to collect dmesg, logcat logs while system boot, or at system runtime. Supports AVC (Access Vector Control) denial message filtering and even generating allow rules for those denials.
-`debug-tools/dlopener`         | A little program to try dlopen(3) on a given ELF file. Prints whether dlopening succeeded or failed. installed as 32/64 system/vendor variants.
-`libextsupport`                | Support headers used by test_clients and AIDL impls
-`libsafestoi`                  | Shared common string to int safe version function. as std::stoi does throw exceptions.
-`sepolicy`                     | SEPolicy rules for executable binaries and apps to function, some parts need to be added to device tree side as well.
-`touch`                        | LineageOS HIDL Touch HAL Implementation for Single tap. Device supports single_tap if `/sys/class/sec/tsp/cmd_list` contains 'singletap_enable'
+`aidl/battery/default`         | AIDL SmartCharge policy service, frozen as vendor.samsung_ext.framework.battery-V1
+`aidl/battery/test_client`     | Client to the AIDL SmartCharge service for testing and debugging
+`aidl/flashlight/default`      | AIDL flashlight brightness controller; frozen V1 plus the current state-query extension
+`aidl/flashlight/test_client`  | Client to the AIDL flashlight controller for testing and debugging
+`aidl/light_ext/default`       | AIDL Light HAL with a sunlight-mode vendor extension (BROKEN)
+`aidl/light_ext/test_client`   | Client to the AIDL Light HAL vendor extension
+`app/FlashControl`             | UI for the HAL-owned flashlight brightness setting
+`app/SmartCharge`              | UI for configuring and live-updating SmartCharge policy
+`debug-tools/bootlogger`       | Bounded boot/runtime log capture with AVC filtering and review-only SELinux rule suggestions
+`debug-tools/dlopener`         | Small program that tests `dlopen(3)` on a supplied ELF file
+`libextsupport`                | Support headers used by test clients and AIDL implementations
+`sepolicy`                     | SELinux policy required by the executables and apps
+`touch`                        | LineageOS HIDL Touch HAL for single tap support
+
+## Host tests
+The `dev` branch includes a CMake/CTest harness for bootlogger parsing and
+rotation, flashlight raw-value mapping, and SmartCharge policy decisions.
+AddressSanitizer and UndefinedBehaviorSanitizer can be enabled with
+`-DSAMSUNG_EXT_ENABLE_SANITIZERS=ON`.
 
 ## ❓ Design goals
-These are currently used with my device trees, as they are common on Samsung devices which i have device trees on. It will be updated as long as I work on those devices. I won't mind if other persons want to use any of these components on their ROM's
+These components are used by device trees maintained in this organization and
+are intended to remain reusable across devices with compatible kernel nodes.
+Contributions and reuse in other ROMs are welcome.

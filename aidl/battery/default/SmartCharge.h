@@ -1,20 +1,22 @@
 /*
  * Copyright (C) 2023 Royna (@roynatech2544 on GH)
- *
  * SPDX-License-Identifier: Apache-2.0
  */
-
 #pragma once
 
+#include "JSONParser.hpp"
+#include "SmartChargePolicy.h"
+
+#include <aidl/android/hardware/health/IHealth.h>
 #include <aidl/vendor/samsung_ext/framework/battery/BnSmartCharge.h>
-#include <aidl/android/hardware/health/BnHealth.h>
 #include <healthhalutils/HealthHalUtils.h>
 
-#include <atomic>
 #include <condition_variable>
-#include <functional>
+#include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
+#include <string>
 #include <thread>
 
 using android::hardware::health::V2_0::IHealth;
@@ -23,78 +25,75 @@ using android::sp;
 using android::wp;
 using IHealthAIDL = aidl::android::hardware::health::IHealth;
 
-namespace aidl {
-namespace vendor {
-namespace samsung_ext {
-namespace framework {
-namespace battery {
+namespace aidl::vendor::samsung_ext::framework::battery {
 
-class hidl_health_death_recipient : public hidl_death_recipient {
-  public:
-    hidl_health_death_recipient(const sp<IHealth>& health)
-        : mHealth(health) {}
-    void serviceDied(uint64_t cookie, const wp<::android::hidl::base::V1_0::IBase>& who);
+class SmartCharge;
 
-  private:
-    sp<IHealth> mHealth;
+class hidl_health_death_recipient final : public hidl_death_recipient {
+ public:
+  hidl_health_death_recipient(const sp<IHealth> &health, SmartCharge *owner)
+      : health_(health), owner_(owner) {}
+  void serviceDied(
+      uint64_t cookie,
+      const wp<::android::hidl::base::V1_0::IBase> &who) override;
+
+ private:
+  sp<IHealth> health_;
+  SmartCharge *owner_;
 };
 
-class SmartCharge : public BnSmartCharge {
-  std::shared_ptr<std::thread> kLoopThread;
-  // Protect above thread pointer
-  std::mutex thread_lock;
-
-  int upper, lower;
-  // Protect above variables
-  std::mutex config_lock;
-
-  // Worker function
-  void startLoop(bool withrestart);
-  // Starter function
-  void createLoopThread(bool restart);
-
-  // Thread status indicator
-  std::atomic_bool kRunning;
-
-  std::condition_variable cv;
-  // Used by above condition_variable
-  std::mutex kCVLock;
-
-  std::function<void(const bool)> setChargableFunc;
-
-  sp<IHealth> health_hidl;
-  sp<hidl_death_recipient> hidl_death_recp;
-  std::shared_ptr<IHealthAIDL> health_aidl;
-  ndk::ScopedAIBinder_DeathRecipient aidl_death_recp;
-  // Protect health_hal pointers
-  std::mutex hal_health_lock;
-
-  enum {
-      UNKNOWN,
-      USE_HEALTH_AIDL,
-      USE_HEALTH_HIDL,
-  } healthState = UNKNOWN;
-
-  enum ChargeStatus {
-      ON,
-      OFF,
-  } status;
-
-  bool loadAndParseConfigProp();
-  void loadConfiguration();
-  void loadEnabledAndStart();
-
-public:
-  void loadHealthImpl();
+class SmartCharge final : public BnSmartCharge {
+ public:
   SmartCharge();
+  ~SmartCharge() override;
+
   ndk::ScopedAStatus setChargeLimit(int32_t upper, int32_t lower) override;
   ndk::ScopedAStatus activate(bool enable, bool restart) override;
+  binder_status_t dump(int fd, const char **args, uint32_t numArgs) override;
 
-  binder_status_t dump(int fd, const char** args, uint32_t numArgs) override;
+  void reloadHealthService();
+
+ private:
+  enum class HealthBackend {
+    NONE,
+    AIDL,
+    HIDL,
+  };
+
+  void loadConfiguration();
+  void loadPersistedState();
+  void connectHealthService();
+  std::optional<int> readBatteryPercent(std::string *error);
+
+  void startWorkerLocked();
+  std::thread stopWorkerLocked(std::unique_lock<std::mutex> *lock);
+  void workerLoop();
+  void wakeWorker();
+  bool applyChargingPermission(bool allowCharging);
+
+  std::mutex apiLock_;
+  ConfigParser::ActionFunction setChargingAllowed_;
+  bool backendSupported_ = false;
+
+  std::mutex stateLock_;
+  std::condition_variable stateCv_;
+  std::thread worker_;
+  bool stopRequested_ = false;
+  bool enabled_ = false;
+  bool restartEnabled_ = false;
+  int upper_ = kInvalidLowerLimit;
+  int lower_ = kInvalidLowerLimit;
+  std::optional<bool> lastAppliedPermission_;
+  int lastBatteryPercent_ = -1;
+  std::string lastError_;
+  std::uint64_t generation_ = 0;
+
+  std::mutex healthLock_;
+  HealthBackend healthBackend_ = HealthBackend::NONE;
+  sp<IHealth> healthHidl_;
+  sp<hidl_death_recipient> hidlDeathRecipient_;
+  std::shared_ptr<IHealthAIDL> healthAidl_;
+  ndk::ScopedAIBinder_DeathRecipient aidlDeathRecipient_;
 };
 
-} // namespace battery
-} // namespace framework
-} // namespace samsung_ext
-} // namespace vendor
-} // namespace aidl
+}  // namespace aidl::vendor::samsung_ext::framework::battery

@@ -3,436 +3,294 @@
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
-#include <algorithm>
+#define LOG_TAG "bootlogger"
+
+#include "LoggerInternal.h"
+
 #include <android-base/file.h>
+#include <android-base/logging.h>
 #include <android-base/properties.h>
+
+#include <algorithm>
+#include <array>
+#include <atomic>
 #include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <fcntl.h>
-#include <fmt/chrono.h>
-#include <fmt/core.h>
-#include <fmt/format.h>
-#include <iomanip>
-#include <limits>
-#include <set>
-#include <string_view>
-#include <sys/stat.h>
-#include <sys/sysinfo.h>
-#include <system_error>
-#include <type_traits>
-#include <unistd.h>
-
-#include <array>
-#include <atomic>
 #include <cstring>
+#include <ctime>
+#include <fcntl.h>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <memory>
-#include <mutex>
-#include <regex>
+#include <poll.h>
+#include <spawn.h>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <sys/eventfd.h>
+#include <sys/stat.h>
+#include <sys/sysinfo.h>
 #include <sys/wait.h>
 #include <thread>
+#include <unistd.h>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
-#include "LoggerInternal.h"
+extern char **environ;
 
 using android::base::GetBoolProperty;
-using android::base::GetProperty;
 using android::base::WaitForProperty;
 using android::base::WriteStringToFile;
-using std::chrono_literals::operator""s; // NOLINT (misc-unused-using-decls)
-
+using namespace std::chrono_literals;
 namespace fs = std::filesystem;
 
 #define MAKE_LOGGER_PROP(prop) "persist.ext.logdump." prop
 
-struct Logcat {
-  constexpr static std::string_view NAME = "logcat";
-  constexpr static std::string_view LOGC = "logcat";
-  struct Data {
-    FILE *out_buf;
-    FILE *err_buf;
-    pid_t pid;
-  };
-  using HANDLE = std::unique_ptr<Data, void (*)(Data *)>;
-
-  static HANDLE open() {
-    HANDLE empty{nullptr, +[](Data * /*file*/) {}};
-    std::array<int, 2> out_fds = {};
-    std::array<int, 2> err_fds = {};
-
-    if (pipe(out_fds.data()) || pipe(err_fds.data())) {
-      PLOG(ERROR) << "Failed to create pipe";
-      return empty;
-    }
-
-    pid_t pid = vfork();
-    if (pid < 0) {
-      PLOG(ERROR) << "Failed to fork";
-      return empty;
-    } else if (pid == 0) {
-      dup2(out_fds[1], STDOUT_FILENO);
-      dup2(err_fds[1], STDERR_FILENO);
-      ::close(out_fds[0]);
-      ::close(err_fds[0]);
-      execlp(LOGC.data(), LOGC.data(), nullptr);
-      _exit(std::numeric_limits<uint8_t>::max());
-    } else {
-      ::close(out_fds[1]);
-      ::close(err_fds[1]);
-      int status = 0;
-      if (waitpid(pid, &status, WNOHANG) != 0) {
-        LOG(ERROR) << "Proc early-exited with error code "
-                   << WEXITSTATUS(status);
-        return empty;
-      }
-      LOG(INFO) << "Forked exe " << std::quoted(LOGC) << " with pid: " << pid;
-      return {new Data{fdopen(out_fds[0], "r"), fdopen(err_fds[0], "r"), pid},
-              &close};
-    }
-  }
-  static void close(Data *data) {
-    ::kill(data->pid, SIGTERM);
-    ::waitpid(data->pid, nullptr, 0);
-    if (data->out_buf != nullptr) {
-      ::fflush(data->out_buf);
-      ::fclose(data->out_buf);
-    }
-    if (data->err_buf != nullptr) {
-      std::array<char, 64> errbuf{};
-      if (::fread(errbuf.data(), errbuf.size(), 1, data->err_buf) != 0) {
-        LOG(ERROR) << "standard error output" << errbuf.data();
-      }
-      ::fflush(data->err_buf);
-      ::fclose(data->err_buf);
-    }
-    delete data;
-  }
-  template <size_t size>
-  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
-    return ::fgets(data.data(), data.size(), handle->out_buf);
-  }
-};
-
-struct Dmesg {
-  constexpr static std::string_view NAME = "dmesg";
-  constexpr static std::string_view FILEC = "/proc/kmsg";
-  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
-
-  static HANDLE open() { return {fopen(FILEC.data(), "r"), &fclose}; }
-  template <size_t size>
-  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
-    return ::fgets(data.data(), data.size(), handle.get());
-  }
-};
-
-#ifdef TESTING
-struct Test {
-  constexpr static std::string_view NAME = "test";
-  using HANDLE = std::unique_ptr<FILE, int (*)(FILE *)>;
-
-  static HANDLE open() {
-    std::filesystem::path file = __FILE__;
-    file = file.parent_path() / "testlogfile.log";
-    return {fopen(file.c_str(), "r"), &fclose};
-  }
-  template <size_t size>
-  static const char *fgets(std::array<char, size> &data, const HANDLE &handle) {
-    return ::fgets(data.data(), data.size(), handle.get());
-  }
-};
-#endif
-
-struct Filter {
-  static bool write(const std::filesystem::path &file,
-                    const std::set<std::string> &results) {
-    if (results.empty()) {
-      return true;
-    }
-    std::ofstream fileStream(file);
-    if (!fileStream.is_open()) {
-      PLOG(ERROR) << "Failed to open file: " << file;
-      return false;
-    }
-    fileStream << fmt::format("{}", fmt::join(results, "\n"));
-    fileStream.close();
-    return true;
-  }
-};
-
-struct FilterAvc : Filter {
-  constexpr static std::string_view NAME = "avc";
-
-  static bool filter(const std::string &line) {
-    // Matches "avc: denied { ioctl } for comm=..." for example
-    const static auto kAvcMessageRegEX = std::regex(
-        R"(avc:\s+denied\s+\{(\s\w+)+\s\}\sfor\s)", std::regex::ECMAScript);
-    bool match = std::regex_search(line, kAvcMessageRegEX,
-                                   std::regex_constants::match_not_null);
-    return match && line.find("untrusted_app") == std::string::npos;
-  }
-};
-
-struct FilterAvcGen : Filter {
-  constexpr static std::string_view NAME = "generated_sepolicy";
-
-  static bool filter(const std::string &line) {
-    AvcContext ctx(line);
-    return !ctx.stale;
-  }
-  static bool write(const std::filesystem::path &file,
-                    const std::set<std::string> &results) {
-    if (results.empty()) {
-      return true;
-    }
-
-    // Translate to AVCContexts vector
-    AvcContexts contexts;
-    std::transform(results.begin(), results.end(), std::back_inserter(contexts),
-                   [](const std::string &file) { return AvcContext(file); });
-
-    // Combine AVC contexts
-    for (auto &e1 : contexts) {
-      for (auto &e2 : contexts) {
-        if (&e1 == &e2) {
-          continue;
-        }
-        e1 += e2;
-      }
-    }
-
-    // Write to file
-    std::ofstream fileStream(file);
-    if (!fileStream.is_open()) {
-      PLOG(ERROR) << "Failed to open file: " << file;
-      return false;
-    }
-    fileStream << fmt::format("{}\n", contexts);
-    fileStream.close();
-    return true;
-  }
-};
-
-/**
- * Start the associated logger
- *
- * @param run Pointer to run/stop control variable
- */
-template <typename Logger, typename... Filters>
-void start(const std::filesystem::path &directory, std::atomic_bool *run) {
-  std::array<char, 512> buf = {0};
-
-  // Open log source
-  typename Logger::HANDLE _fp = Logger::open();
-  if (_fp == nullptr) {
-    LOG(ERROR) << "Failed to open source for logger " << Logger::NAME;
-    return;
-  }
-
-  // Open log destination
-  std::filesystem::path logPath(directory /
-                                fmt::format("{}.txt", Logger::NAME));
-  std::ofstream logFile(logPath);
-  if (!logFile.is_open()) {
-    PLOG(ERROR) << "Failed to open " << logPath << " for logging";
-    return;
-  }
-
-  std::tuple<std::pair<Filters, std::set<std::string>>...> filters{};
-  while (*run) {
-    const char *ret = Logger::fgets(buf, _fp);
-    std::istringstream ss(buf.data());
-    std::string line;
-    if (ret == nullptr) {
-      continue;
-    }
-    while (std::getline(ss, line)) {
-      std::apply(
-          [&line](auto &...filter) {
-            (
-                [&] {
-                  if (filter.first.filter(line)) {
-                    filter.second.insert(line);
-                  }
-                }(),
-                ...);
-          },
-          filters);
-      logFile << line << '\n';
-    }
-  }
-  _fp.reset();
-  logFile.close();
-
-  std::error_code ec;
-  if (std::filesystem::file_size(logPath, ec) == 0) {
-    std::filesystem::remove(logPath, ec);
-    LOG(INFO) << "No log entries found for logger " << Logger::NAME;
-    return;
-  }
-
-  std::apply(
-      [&directory](auto &...filter) {
-        (
-            [&] {
-              if (filter.second.empty()) {
-                return;
-              }
-              using FilterType = std::decay_t<decltype(filter.first)>;
-              bool wrote = FilterType::write(
-                  directory /
-                      fmt::format("{}.{}.txt", Logger::NAME, FilterType::NAME),
-                  filter.second);
-              if (!wrote) {
-                PLOG(ERROR) << "Failed to write to log file for logger "
-                            << Logger::NAME;
-              }
-            }(),
-            ...);
-      },
-      filters);
-}
-
 namespace {
-constexpr std::string_view DEV_KMSG = "/dev/kmsg";
 
-void recordBootTime() {
-  struct sysinfo x {};
-  std::string logbuf;
-  using std::chrono::seconds;
+constexpr std::string_view kLogRoot = "/data/debug";
+constexpr std::string_view kDevKmsg = "/dev/kmsg";
+constexpr std::size_t kRetainedCaptures = 3;
+constexpr std::uintmax_t kMaxSourceBytes = 64ULL * 1024ULL * 1024ULL;
+constexpr std::uintmax_t kMinimumFreeBytes = 256ULL * 1024ULL * 1024ULL;
+constexpr std::size_t kFlushBytes = 64ULL * 1024ULL;
+constexpr auto kFlushInterval = 1s;
+constexpr auto kSyncInterval = 5s;
+constexpr auto kPostBootDrain = 2s;
+constexpr std::size_t kMaximumLineBytes = 1024ULL * 1024ULL;
 
-  if ((sysinfo(&x) == 0)) {
-    logbuf = fmt::format("Boot completed in {:%Mm%Ss}", seconds(x.uptime));
-    LOG(INFO) << logbuf;
-    WriteStringToFile(logbuf, DEV_KMSG.data());
+class ScopedFd {
+ public:
+  ScopedFd() = default;
+  explicit ScopedFd(int fd) : fd_(fd) {}
+  ~ScopedFd() { reset(); }
+  ScopedFd(const ScopedFd &) = delete;
+  ScopedFd &operator=(const ScopedFd &) = delete;
+  ScopedFd(ScopedFd &&other) noexcept : fd_(other.release()) {}
+  ScopedFd &operator=(ScopedFd &&other) noexcept {
+    if (this != &other) reset(other.release());
+    return *this;
   }
-}
+  [[nodiscard]] int get() const { return fd_; }
+  [[nodiscard]] explicit operator bool() const { return fd_ >= 0; }
+  int release() { int value = fd_; fd_ = -1; return value; }
+  void reset(int fd = -1) { if (fd_ >= 0) ::close(fd_); fd_ = fd; }
+ private:
+  int fd_ = -1;
+};
 
-bool delAllAndRecreate(const std::filesystem::path &path) {
-  std::error_code ec;
-
-  LOG(INFO) << "Deleting everything in " << path;
-  if (fs::is_directory(path, ec)) {
-    fs::remove_all(path, ec);
-    if (ec) {
-      LOG(ERROR) << fmt::format("Failed to remove directory '{}': {}",
-                                path.string(), ec.message());
-      return false;
-    }
-  }
-  LOG(INFO) << "Recreating directory...";
-  if (!fs::create_directories(path, ec) && ec) {
-    LOG(ERROR) << fmt::format("Failed to create directory '{}': {}",
-                              path.string(), ec.message());
+bool WriteAll(int fd, std::string_view data) {
+  while (!data.empty()) {
+    ssize_t written = ::write(fd, data.data(), data.size());
+    if (written > 0) { data.remove_prefix(static_cast<std::size_t>(written)); continue; }
+    if (written < 0 && errno == EINTR) continue;
     return false;
   }
   return true;
 }
-} // namespace
 
-int main(int argc, char **argv) {
-  std::vector<std::thread> threads;
-  std::atomic_bool run;
-  bool system_log = false;
-  std::mutex lock;
-  fs::path kLogDir;
-
-  android::base::InitLogging(argv);
-
-  umask(022);
-
-#ifndef TESTING
-  if (argc != 3) {
-    fmt::print(stderr, "Usage: {} [log directory] [directory name]\n", argv[0]);
-    return EXIT_FAILURE;
+class DurableWriter {
+ public:
+  DurableWriter(fs::path path, std::uintmax_t maxBytes, std::uintmax_t minimumFreeBytes)
+      : path_(std::move(path)), maxBytes_(maxBytes), minimumFreeBytes_(minimumFreeBytes),
+        lastFlush_(Clock::now()), lastSync_(lastFlush_), lastSpaceCheck_(lastFlush_) {
+    fd_.reset(::open(path_.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600));
+    if (!fd_) { PLOG(ERROR) << "Failed to open " << path_; accepting_ = false; }
   }
-  kLogDir = argv[1];
-  if (kLogDir.empty()) {
-    fmt::print(stderr, "{}: Invalid empty string for log directory\n", argv[0]);
-    return EXIT_FAILURE;
-  }
-  kLogDir /= argv[2];
-#else
-  kLogDir = "./test";
-#endif
-
-  if (getenv("LOGGER_MODE_SYSTEM") != nullptr) {
-    LOG(INFO) << "Running in system log mode";
-    system_log = true;
-  }
-
-  LOG(INFO) << fmt::format("Logger starting with logdir '{}'...",
-                           kLogDir.string());
-
-  // Determine audit support
-  bool has_audit = false;
-  if (KernelConfigType kConfig; ReadKernelConfig(kConfig) == 0) {
-    if (kConfig["CONFIG_AUDIT"] == ConfigValue::BUILT_IN) {
-      LOG(INFO) << "Detected CONFIG_AUDIT=y in kernel configuration";
-      has_audit = true;
-    }
-  }
-
-  if (!delAllAndRecreate(kLogDir)) {
-    return EXIT_FAILURE;
-  }
-
-  run = true;
-  // If this prop is true, logd logs kernel message to logcat
-  // Don't make duplicate (Also it will race against kernel logs)
-  if (!GetBoolProperty("ro.logd.kernel", false)) {
-    threads.emplace_back([&] {
-      if (has_audit) {
-        start<Dmesg, FilterAvc, FilterAvcGen>(kLogDir, &run);
-      } else {
-        start<Dmesg>(kLogDir, &run);
+  ~DurableWriter() { finish(); }
+  DurableWriter(const DurableWriter &) = delete;
+  DurableWriter &operator=(const DurableWriter &) = delete;
+  [[nodiscard]] bool valid() const { return static_cast<bool>(fd_); }
+  [[nodiscard]] bool accepting() const { return accepting_; }
+  bool appendLine(std::string_view line) {
+    if (!accepting_ || !fd_) return false;
+    auto now = Clock::now();
+    if (now - lastSpaceCheck_ >= kFlushInterval) {
+      lastSpaceCheck_ = now;
+      if (!HasMinimumFreeSpace(path_.parent_path(), minimumFreeBytes_)) {
+        stopWithMarker("[bootlogger: capture stopped because free space is low]");
+        return false;
       }
-    });
+    }
+    std::uintmax_t incoming = line.size() + 1U;
+    if (writtenBytes_ + buffer_.size() + incoming > maxBytes_) {
+      stopWithMarker("[bootlogger: source size limit reached; output truncated]");
+      return false;
+    }
+    buffer_.append(line); buffer_.push_back('\n'); maintenance(); return true;
   }
-
-  std::ofstream timestamp(kLogDir / "TIMESTAMP");
-  if (timestamp.is_open()) {
-    timestamp << fmt::format("{:%F %T}", std::chrono::system_clock::now());
+  void maintenance() {
+    if (!fd_) return;
+    auto now = Clock::now();
+    if (!buffer_.empty() && (buffer_.size() >= kFlushBytes || now - lastFlush_ >= kFlushInterval)) flush();
+    if (now - lastSync_ >= kSyncInterval) sync();
   }
-  timestamp.close();
+  void finish() {
+    if (!fd_ || finished_) return;
+    flush();
+    if (::fdatasync(fd_.get()) != 0) PLOG(ERROR) << "fdatasync failed for " << path_;
+    finished_ = true;
+  }
+ private:
+  using Clock = std::chrono::steady_clock;
+  void flush() {
+    if (buffer_.empty() || !fd_) { lastFlush_ = Clock::now(); return; }
+    if (!WriteAll(fd_.get(), buffer_)) { PLOG(ERROR) << "Failed to write " << path_; accepting_ = false; buffer_.clear(); return; }
+    writtenBytes_ += buffer_.size(); buffer_.clear(); lastFlush_ = Clock::now();
+  }
+  void sync() {
+    flush();
+    if (fd_ && ::fdatasync(fd_.get()) != 0) { PLOG(ERROR) << "fdatasync failed for " << path_; accepting_ = false; }
+    lastSync_ = Clock::now();
+  }
+  void stopWithMarker(std::string_view marker) {
+    if (!accepting_) return;
+    std::uintmax_t remaining = maxBytes_ > writtenBytes_ + buffer_.size() ? maxBytes_ - writtenBytes_ - buffer_.size() : 0;
+    if (remaining > 1) {
+      auto markerLength = std::min<std::size_t>(marker.size(), static_cast<std::size_t>(remaining - 1));
+      buffer_.append(marker.substr(0, markerLength)); buffer_.push_back('\n');
+    }
+    accepting_ = false; sync();
+  }
+  fs::path path_; ScopedFd fd_; std::string buffer_;
+  std::uintmax_t maxBytes_ = 0, minimumFreeBytes_ = 0, writtenBytes_ = 0;
+  bool accepting_ = true, finished_ = false;
+  Clock::time_point lastFlush_, lastSync_, lastSpaceCheck_;
+};
 
-  threads.emplace_back(
-      [&] { start<Logcat, FilterAvc, FilterAvcGen>(kLogDir, &run); });
+class StopEvent {
+ public:
+  StopEvent() : fd_(::eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK)) { if (!fd_) PLOG(ERROR) << "eventfd creation failed"; }
+  [[nodiscard]] int fd() const { return fd_.get(); }
+  [[nodiscard]] bool valid() const { return static_cast<bool>(fd_); }
+  void requestStop() {
+    if (!fd_) return;
+    std::uint64_t value = 1;
+    if (::write(fd_.get(), &value, sizeof(value)) < 0 && errno != EAGAIN) PLOG(ERROR) << "Failed to signal logger shutdown";
+  }
+ private: ScopedFd fd_;
+};
+
+void SetNonBlocking(int fd) { int flags = ::fcntl(fd, F_GETFL, 0); if (flags >= 0) (void)::fcntl(fd, F_SETFL, flags | O_NONBLOCK); }
+
+class LogcatSource {
+ public:
+  static constexpr std::string_view NAME = "logcat";
+  ~LogcatSource() { stopChild(); }
+  bool open() {
+    std::array<int,2> pipeFds{};
+    if (::pipe2(pipeFds.data(), O_CLOEXEC) != 0) { PLOG(ERROR) << "Failed to create logcat pipe"; return false; }
+    ScopedFd readEnd(pipeFds[0]), writeEnd(pipeFds[1]);
+    posix_spawn_file_actions_t actions;
+    if (posix_spawn_file_actions_init(&actions) != 0) return false;
+    (void)posix_spawn_file_actions_adddup2(&actions, writeEnd.get(), STDOUT_FILENO);
+    (void)posix_spawn_file_actions_adddup2(&actions, writeEnd.get(), STDERR_FILENO);
+    (void)posix_spawn_file_actions_addclose(&actions, readEnd.get());
+    (void)posix_spawn_file_actions_addclose(&actions, writeEnd.get());
+    char program[] = "logcat"; char *const arguments[] = {program, nullptr};
+    int result = ::posix_spawnp(&pid_, program, &actions, nullptr, arguments, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    if (result != 0) { errno = result; PLOG(ERROR) << "Failed to spawn logcat"; pid_ = -1; return false; }
+    writeEnd.reset(); SetNonBlocking(readEnd.get()); fd_ = std::move(readEnd); return true;
+  }
+  [[nodiscard]] int fd() const { return fd_.get(); }
+ private:
+  void stopChild() {
+    fd_.reset(); if (pid_ <= 0) return;
+    (void)::kill(pid_, SIGTERM);
+    for (int attempt=0; attempt<20; ++attempt) {
+      pid_t result = ::waitpid(pid_, nullptr, WNOHANG);
+      if (result == pid_ || (result < 0 && errno == ECHILD)) { pid_ = -1; return; }
+      std::this_thread::sleep_for(50ms);
+    }
+    (void)::kill(pid_, SIGKILL); (void)::waitpid(pid_, nullptr, 0); pid_ = -1;
+  }
+  ScopedFd fd_; pid_t pid_ = -1;
+};
+
+class KernelSource {
+ public:
+  static constexpr std::string_view NAME = "dmesg";
+  bool open() { fd_.reset(::open("/proc/kmsg", O_RDONLY | O_NONBLOCK | O_CLOEXEC)); return static_cast<bool>(fd_); }
+  [[nodiscard]] int fd() const { return fd_.get(); }
+ private: ScopedFd fd_;
+};
 
 #ifdef TESTING
-  threads.emplace_back(
-      [&] { start<Test, FilterAvc, FilterAvcGen>(kLogDir, &run); });
+class TestSource {
+ public:
+  static constexpr std::string_view NAME = "test";
+  bool open() { fs::path path=__FILE__; path=path.parent_path()/"testlogfile.log"; fd_.reset(::open(path.c_str(), O_RDONLY|O_CLOEXEC)); return static_cast<bool>(fd_); }
+  [[nodiscard]] int fd() const { return fd_.get(); }
+ private: ScopedFd fd_;
+};
 #endif
 
-  if (system_log) {
-    WaitForProperty(MAKE_LOGGER_PROP("enabled"), "false");
-  } else {
-    WaitForProperty("sys.boot_completed", "1");
-    recordBootTime();
+class AvcCollector {
+ public:
+  AvcCollector(fs::path directory, std::string sourceName) : directory_(std::move(directory)), sourceName_(std::move(sourceName)) {}
+  void consume(std::string_view line) {
+    AvcContext context(line); if (!context.isDenied() || context.isUntrustedApp()) return;
+    std::string copy(line); if (!uniqueLines_.insert(copy).second) return;
+    ensureRawWriter(); if (rawWriter_) rawWriter_->appendLine(copy); contexts_.push_back(std::move(context));
   }
-  LOG(INFO) << "Woke up, waiting for threads to finish";
-  run = false;
-  for (auto &i : threads) {
-    i.join();
+  void maintenance() { if (rawWriter_) rawWriter_->maintenance(); }
+  void finish() {
+    if (rawWriter_) rawWriter_->finish(); if (contexts_.empty()) return;
+    DurableWriter suggestions(directory_/(sourceName_+".suggestions.te"), kMaxSourceBytes, kMinimumFreeBytes);
+    if (!suggestions.valid()) return;
+    std::string formatted=FormatAllowSuggestions(std::move(contexts_));
+    std::size_t begin=0;
+    while (begin<formatted.size()) { auto end=formatted.find('\n',begin); if (end==std::string::npos) { suggestions.appendLine(std::string_view(formatted).substr(begin)); break; } suggestions.appendLine(std::string_view(formatted).substr(begin,end-begin)); begin=end+1; }
+    suggestions.finish();
   }
-  LOG(INFO) << "Logger stopped";
-  return 0;
+ private:
+  void ensureRawWriter() { if (!rawWriter_) rawWriter_=std::make_unique<DurableWriter>(directory_/(sourceName_+".avc.txt"),kMaxSourceBytes,kMinimumFreeBytes); }
+  fs::path directory_; std::string sourceName_; std::unique_ptr<DurableWriter> rawWriter_; std::unordered_set<std::string> uniqueLines_; AvcContexts contexts_;
+};
+
+template <typename Source>
+void RunSource(const fs::path &directory, const StopEvent &stopEvent, bool collectAvc) {
+  Source source; if (!source.open()) return;
+  DurableWriter writer(directory/(std::string(Source::NAME)+".txt"),kMaxSourceBytes,kMinimumFreeBytes); if (!writer.valid()) return;
+  std::unique_ptr<AvcCollector> avc; if (collectAvc) avc=std::make_unique<AvcCollector>(directory,std::string(Source::NAME));
+  std::string pendingLine; bool dropping=false, eof=false; std::array<char,BUF_SIZE> buffer{};
+  auto processLine=[&](std::string line){ if (!line.empty()&&line.back()=='\r') line.pop_back(); writer.appendLine(line); if(avc) avc->consume(line); };
+  auto consume=[&](std::string_view bytes){ for(char c:bytes){ if(dropping){ if(c=='\n') dropping=false; continue;} if(c=='\n'){processLine(std::move(pendingLine)); pendingLine.clear(); continue;} pendingLine.push_back(c); if(pendingLine.size()>kMaximumLineBytes){writer.appendLine("[bootlogger: oversized log line omitted]"); pendingLine.clear(); dropping=true;}}};
+  while(!eof&&writer.accepting()){
+    std::array<pollfd,2> descriptors{{{source.fd(),POLLIN|POLLERR|POLLHUP,0},{stopEvent.fd(),POLLIN,0}}};
+    int result=::poll(descriptors.data(),descriptors.size(),250); writer.maintenance(); if(avc) avc->maintenance();
+    if(result<0){if(errno==EINTR)continue;break;} if(descriptors[1].revents&POLLIN)break; if(result==0)continue;
+    if(descriptors[0].revents&(POLLIN|POLLHUP|POLLERR)){while(true){ssize_t count=::read(source.fd(),buffer.data(),buffer.size()); if(count>0){consume(std::string_view(buffer.data(),static_cast<std::size_t>(count)));continue;} if(count==0){eof=true;break;} if(errno==EINTR)continue; if(errno==EAGAIN||errno==EWOULDBLOCK)break; eof=true;break;}}
+  }
+  if(!dropping&&!pendingLine.empty())processLine(std::move(pendingLine)); writer.finish(); if(avc)avc->finish();
+}
+
+bool WriteTimestamp(const fs::path &directory){fs::path path=directory/"TIMESTAMP";ScopedFd fd(::open(path.c_str(),O_WRONLY|O_CREAT|O_TRUNC|O_CLOEXEC,0600));if(!fd)return false;std::time_t now=std::time(nullptr);std::tm localTime{};if(::localtime_r(&now,&localTime)==nullptr)return false;std::ostringstream formatted;formatted<<std::put_time(&localTime,"%F %T")<<'\n';return WriteAll(fd.get(),formatted.str())&&::fdatasync(fd.get())==0;}
+#ifndef TESTING
+void RecordBootTime(){struct sysinfo info{};if(::sysinfo(&info)!=0)return;long minutes=info.uptime/60,seconds=info.uptime%60;std::string message="Boot completed in "+std::to_string(minutes)+"m"+std::to_string(seconds)+"s";LOG(INFO)<<message;(void)WriteStringToFile(message,std::string(kDevKmsg));}
+bool KernelAuditEnabled(){KernelConfigType config;if(ReadKernelConfig(config)!=0)return false;auto it=config.find("CONFIG_AUDIT");return it!=config.end()&&it->second==ConfigValue::BUILT_IN;}
+#endif
+}  // namespace
+
+int main(int argc,char **argv){android::base::InitLogging(argv);::umask(077);fs::path root;std::string captureName;
+#ifdef TESTING
+(void)argc;root=fs::current_path()/"test-output";captureName="boot";
+#else
+if(argc!=3)return EXIT_FAILURE;root=fs::path(argv[1]).lexically_normal();captureName=argv[2];if(root!=fs::path(kLogRoot)||!IsSafeCaptureName(captureName))return EXIT_FAILURE;
+#endif
+fs::path captureDirectory;std::string error;if(!PrepareCaptureDirectory(root,captureName,kRetainedCaptures,&captureDirectory,&error))return EXIT_FAILURE;(void)WriteTimestamp(captureDirectory);StopEvent stopEvent;if(!stopEvent.valid())return EXIT_FAILURE;
+#ifdef TESTING
+std::thread testThread([&]{RunSource<TestSource>(captureDirectory,stopEvent,true);});testThread.join();return EXIT_SUCCESS;
+#else
+bool systemLog=std::getenv("LOGGER_MODE_SYSTEM")!=nullptr;bool auditFilterEnabled=GetBoolProperty(MAKE_LOGGER_PROP("audit_filter_enabled"),true);bool kernelAuditEnabled=auditFilterEnabled&&KernelAuditEnabled();std::vector<std::thread> threads;if(!GetBoolProperty("ro.logd.kernel",false))threads.emplace_back([&]{RunSource<KernelSource>(captureDirectory,stopEvent,kernelAuditEnabled);});threads.emplace_back([&]{RunSource<LogcatSource>(captureDirectory,stopEvent,auditFilterEnabled);});if(systemLog)(void)WaitForProperty(MAKE_LOGGER_PROP("enabled"),"false");else{(void)WaitForProperty("sys.boot_completed","1");RecordBootTime();}std::this_thread::sleep_for(kPostBootDrain);stopEvent.requestStop();for(auto &thread:threads)thread.join();return EXIT_SUCCESS;
+#endif
 }

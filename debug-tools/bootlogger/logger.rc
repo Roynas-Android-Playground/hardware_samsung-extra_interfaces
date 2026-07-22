@@ -10,7 +10,7 @@ service logdump-system /system/system_ext/bin/logger /data/debug system
     disabled
 
 on post-fs-data
-    mkdir /data/debug 0755 root root encryption=None
+    mkdir /data/debug 0700 root root encryption=None
     start logdump
 
 on property:sys.boot_completed=1 && property:persist.ext.logdump.enabled=true

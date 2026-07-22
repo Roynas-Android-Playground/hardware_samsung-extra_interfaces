@@ -1,152 +1,169 @@
-#include <fmt/core.h>
+#include "LoggerInternal.h"
+
+#include <algorithm>
+#include <cctype>
+#include <cerrno>
+#include <cstdio>
+#include <string>
 #include <string_view>
 #include <sys/stat.h>
 #include <zlib.h>
 
 #include <array>
-#include <cstdio>
-#include <regex>
 #include <sstream>
-#include <string>
 
-#include "LoggerInternal.h"
+namespace {
 
-static constexpr std::string_view kProcConfigGz = "/proc/config.gz";
+constexpr std::string_view kProcConfigGz = "/proc/config.gz";
 
-static int ReadConfigGz(std::string &out) {
-  std::array<char, BUF_SIZE> buf{};
-  size_t len = 0;
-  gzFile f = gzopen(kProcConfigGz.data(), "rb");
-  if (f == nullptr) {
-    PLOG(ERROR) << "gzopen failed";
+int ReadConfigGz(std::string &out) {
+  std::array<char, BUF_SIZE> buffer{};
+  gzFile file = gzopen(kProcConfigGz.data(), "rb");
+  if (file == nullptr) {
     return -errno;
   }
-  while ((len = gzread(f, buf.data(), buf.size())) != 0U) {
-    out.append(buf.data(), len);
+
+  int length = 0;
+  while ((length = gzread(file, buffer.data(),
+                          static_cast<unsigned int>(buffer.size()))) > 0) {
+    out.append(buffer.data(), static_cast<std::size_t>(length));
   }
-  if (len < 0) {
-    int errnum = 0;
-    const char *errmsg = gzerror(f, &errnum);
-    LOG(ERROR) << "Could not read " << kProcConfigGz << ": " << errmsg;
-    return (errnum == Z_ERRNO ? -errno : errnum);
+
+  if (length < 0) {
+    int zlibError = Z_OK;
+    (void)gzerror(file, &zlibError);
+    gzclose(file);
+    return zlibError == Z_ERRNO ? -errno : zlibError;
   }
-  gzclose(f);
-  return 0;
+
+  const int closeResult = gzclose(file);
+  return closeResult == Z_OK ? 0 : closeResult;
 }
 
-static bool parseOneConfigLine(const std::string &line,
-                               KernelConfigType &outvec) {
-  static const std::regex kDisabledConfig(R"(^#\sCONFIG_\w+ is not set$)");
-  static const std::regex kEnabledConfig(R"(^CONFIG_\w+=(y|m|(")?(.+)?(")?)$)");
-  static const auto flags = std::regex_constants::format_sed;
-  std::string config;
-  bool ret = false;
-  ConfigValue value = ConfigValue::UNKNOWN;
-
-  ret = std::regex_match(line, kEnabledConfig, flags);
-  if (ret) {
-    char c = line[line.find('=') + 1];
-    switch (c) {
-    case 'y':
-      value = ConfigValue::BUILT_IN;
-      break;
-    case 'm':
-      value = ConfigValue::MODULE;
-      break;
-    case '"':
-      value = ConfigValue::STRING;
-      break;
-    case '-': // Minus
-    case '0' ... '9':
-      value = ConfigValue::INT;
-      break;
-    default:
-      LOG(WARNING) << "Unknown config value: " << c;
-      return ret;
-    };
-  } else {
-    ret = std::regex_match(line, kDisabledConfig, flags);
-    if (ret) {
-      value = ConfigValue::UNSET;
-    } else {
-      // Is it a comment or newline?
-      // Assume OK first
-      ret = true;
-      if (!line.empty()) {
-        ret = line.front() == '#';
-        if (!ret) {
-          LOG(WARNING) << "Unparsable line: " << line;
-        }
+bool IsIntegerConfigValue(std::string_view value) {
+  if (value.empty()) {
+    return false;
+  }
+  if (value.front() == '-') {
+    value.remove_prefix(1);
+  }
+  if (value.empty()) {
+    return false;
+  }
+  if (value.size() > 2 && value[0] == '0' &&
+      (value[1] == 'x' || value[1] == 'X')) {
+    value.remove_prefix(2);
+    if (value.empty()) {
+      return false;
+    }
+    for (const char c : value) {
+      if (!std::isxdigit(static_cast<unsigned char>(c))) {
+        return false;
       }
-      return ret;
+    }
+    return true;
+  }
+  for (const char c : value) {
+    if (!std::isdigit(static_cast<unsigned char>(c))) {
+      return false;
     }
   }
-  // Trim out CONFIG_* part
-  switch (value) {
-  case BUILT_IN:
-  case MODULE:
-  case STRING:
-  case INT:
-    // CONFIG_AAA=y
-    // = symbol being the delimiter
-    config = line.substr(0, line.find_first_of('='));
-    break;
-  case UNSET:
-    // # CONFIG_AAA is not set
-    // Space after AAA being the delimiter.
-    // '# ', size 2
-    config = line.substr(2);
-    config = config.substr(0, config.find_first_of(' '));
-    break;
-  case UNKNOWN:
-    break;
+  return true;
+}
+
+}  // namespace
+
+bool ParseKernelConfigLine(std::string_view line, std::string *name,
+                           ConfigValue *value) {
+  if (name == nullptr || value == nullptr) {
+    return false;
+  }
+  name->clear();
+  *value = ConfigValue::UNKNOWN;
+
+  if (line.empty() || (line.front() == '#' &&
+                       line.rfind("# CONFIG_", 0) != 0)) {
+    return true;
   }
 
-  outvec.emplace(config, value);
-  return ret;
+  constexpr std::string_view kDisabledPrefix = "# ";
+  constexpr std::string_view kDisabledSuffix = " is not set";
+  if (line.rfind("# CONFIG_", 0) == 0 &&
+      line.size() > kDisabledPrefix.size() + kDisabledSuffix.size() &&
+      line.substr(line.size() - kDisabledSuffix.size()) == kDisabledSuffix) {
+    const auto config = line.substr(
+        kDisabledPrefix.size(),
+        line.size() - kDisabledPrefix.size() - kDisabledSuffix.size());
+    if (config.empty()) {
+      return false;
+    }
+    *name = std::string(config);
+    *value = ConfigValue::UNSET;
+    return true;
+  }
+
+  if (line.rfind("CONFIG_", 0) != 0) {
+    return false;
+  }
+
+  const auto delimiter = line.find('=');
+  if (delimiter == std::string_view::npos || delimiter == 0 ||
+      delimiter + 1 >= line.size()) {
+    return false;
+  }
+
+  *name = std::string(line.substr(0, delimiter));
+  const auto configValue = line.substr(delimiter + 1);
+  if (configValue == "y") {
+    *value = ConfigValue::BUILT_IN;
+  } else if (configValue == "m") {
+    *value = ConfigValue::MODULE;
+  } else if (configValue.size() >= 2 && configValue.front() == '"' &&
+             configValue.back() == '"') {
+    *value = ConfigValue::STRING;
+  } else if (IsIntegerConfigValue(configValue)) {
+    *value = ConfigValue::INT;
+  } else {
+    name->clear();
+    *value = ConfigValue::UNKNOWN;
+    return false;
+  }
+  return true;
 }
 
 int ReadKernelConfig(KernelConfigType &out) {
-  struct stat statbuf {};
-  std::string buf;
-  std::string line;
-  std::stringstream ss;
-  int rc = 0;
-  int lines = 0;
-
-  // Determine config.gz size
-  rc = stat(kProcConfigGz.data(), &statbuf);
-  if (rc < 0) {
-    PLOG(ERROR) << "stat " << kProcConfigGz << " failed";
+  struct stat statBuffer {};
+  if (stat(kProcConfigGz.data(), &statBuffer) < 0) {
     return -errno;
   }
-  // Linux uses gzip -9 ratio to compress, which has average ratio of 21%
-  // Reserve string buffer size to avoid realloc's
-  buf.reserve(statbuf.st_size * 5);
-  rc = ReadConfigGz(buf);
-  if (rc < 0) {
-    return rc;
+
+  std::string buffer;
+  if (statBuffer.st_size > 0) {
+    buffer.reserve(static_cast<std::size_t>(statBuffer.st_size) * 5U);
   }
-  // Clear if there was anything
+
+  const int readResult = ReadConfigGz(buffer);
+  if (readResult != 0) {
+    return readResult;
+  }
+
   out.clear();
-  // Determine map size by newlines
-  for (const char c : buf) {
-    if (c == '\n') {
-      lines++;
+  out.reserve(static_cast<std::size_t>(
+      std::count(buffer.begin(), buffer.end(), '\n')));
+
+  std::istringstream stream(buffer);
+  std::string line;
+  int parseErrors = 0;
+  while (std::getline(stream, line)) {
+    std::string name;
+    ConfigValue value = ConfigValue::UNKNOWN;
+    if (!ParseKernelConfigLine(line, &name, &value)) {
+      parseErrors = 1;
+      continue;
+    }
+    if (!name.empty()) {
+      out.insert_or_assign(std::move(name), value);
     }
   }
-  // Avoid unnessary reallocs (Kernel configurations are a lot)
-  out.reserve(lines);
-  // Parse line by line
-  ss = std::stringstream(buf);
-  while (std::getline(ss, line)) {
-    // Returns true (1) on success, so invert it to
-    // make use of bitwise OR
-    rc |= static_cast<int>(!parseOneConfigLine(line, out));
-  }
-  // If any of them returned false, rc would be 1
-  if (rc != 0) {
-    LOG(ERROR) << "Error(s) were found parsing " << kProcConfigGz;
-  }
-  return rc;
+  return parseErrors;
 }

@@ -8,19 +8,10 @@
 // 2). this is a 'current' file. If you make a backwards compatible change to
 //     the interface (from the latest frozen version), the build system will
 //     prompt you to update this file with `m <name>-update-api`.
-//
-// You must not make a backward incompatible change to any AIDL file built
-// with the aidl_interface module type with versions property set. The module
-// type is used to build AIDL files in a way that they can be used across
-// independently updatable components of the system. If a device is shipped
-// with such a backward incompatible change, it has a high risk of breaking
-// later when a module using the interface is updated, e.g., Mainline modules.
 
 package vendor.samsung_ext.hardware.camera.flashlight;
 @VintfStability
-interface IFlashlight {
-  int getCurrentBrightness();
-  void setBrightness(in int level);
-  void enableFlash(in boolean enable);
-  vendor.samsung_ext.hardware.camera.flashlight.FlashlightState getState();
+parcelable FlashlightState {
+  boolean enabled;
+  int brightnessLevel;
 }

@@ -7,7 +7,7 @@ android_app {
     certificate: "platform",
     static_libs: [
         "androidx.preference_preference",
-        "vendor.samsung_ext.hardware.camera.flashlight-V1-java",
+        "vendor.samsung_ext.hardware.camera.flashlight-V2-java",
     ],
     defaults: ["SettingsLibDefaults"],
     required: [

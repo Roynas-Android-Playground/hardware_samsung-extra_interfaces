@@ -2,35 +2,29 @@ package vendor.samsung_ext.framework.battery;
 
 @VintfStability
 interface ISmartCharge {
-	/**
-	 * Set a charge limit - the main function of this framework HAL.
-	 * Negative value passed to the parameter [lower] are considered no-op.
-	 * You must call #activate with [enable] to false first, or ensure impl
-	 * is not running. else this will throw an IllegalStateException.
-	 *
-	 * @param upper Upper charge limit by percent of 100.
-	 * @param lower Lower charge limit by percent of 100.
-	 * @throws IllegalStateException if impl was running.
-	 * @throws IllegalArgumentException if [upper] is
-	 * less than 1, if [upper] is not higher than [lower]
-	 * or if any of 2 does not fall under 1 ~ 100 range.
-	 */
-	void setChargeLimit(in int upper, in int lower);
+    /**
+     * Sets the charging policy thresholds.
+     * This operation may be called while the policy is active; the running
+     * worker re-evaluates the new policy immediately.
+     *
+     * @param upper stop charging at or above this percentage (50-95).
+     * @param lower resume charging at or below this percentage, or -1 for
+     *              stop-only mode.
+     * @throws IllegalArgumentException for an invalid threshold pair.
+     */
+    void setChargeLimit(in int upper, in int lower);
 
-	/**
-	 * Enable/Disable the charge limit framework.
-	 * if [enable] is false, [restart] is ignored.
-	 * You must call #setChargeLimit first or ensure that
-	 * config props has valid value else this will
-	 * throw an IllegalStateException.
-	 *
-	 * @param enable Enable the implementation
-	 * @param restart Use the charge-restart method, if
-	 * false, charging is stopped at [upper]
-	 * @throws IllegalStateException if #setChargeLimit
-	 * wasn't called before and config from property is invalid.
-	 * @throws IllegalArgumentException if [enable] is
-	 * true, and it is already enabled, and vice versa.
-	 */
-	void activate(in boolean enable, in boolean restart);
+    /**
+     * Idempotently enables or disables SmartCharge.
+     * Re-enabling with a different restart value updates the running mode.
+     * Disabling always attempts to restore charging permission. Transient
+     * Health/backend failures fail open and are retried while enabled.
+     *
+     * @param enable whether the policy should run.
+     * @param restart whether hysteresis restart mode should be used.
+     * @throws UnsupportedOperationException if no device backend is available.
+     * @throws IllegalStateException if valid thresholds are not configured.
+     * @throws IllegalArgumentException if restart mode has no lower threshold.
+     */
+    void activate(in boolean enable, in boolean restart);
 }
